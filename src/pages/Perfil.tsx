@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Loader2, User, Save } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, type ChangeEvent } from 'react'
+import { Loader2, User, Camera, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/hooks/use-auth'
-import { getUsuario, updateUsuario, type Usuario } from '@/services/usuarios'
+import { getUsuario, type Usuario } from '@/services/usuarios'
+import { validateAvatarFile, uploadAvatar } from '@/services/avatar'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 
 function getInitials(name: string) {
   return name
@@ -19,18 +21,18 @@ function getInitials(name: string) {
 }
 
 export default function Perfil() {
-  const { user, updateUser } = useAuth()
+  const { user, token, updateUser } = useAuth()
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [nomeCompleto, setNomeCompleto] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async () => {
     if (!user?.id) return
     try {
       const data = await getUsuario(user.id)
       setUsuario(data)
-      setNomeCompleto(data.nome_completo)
     } catch {
       toast.error('Erro ao carregar dados do perfil.')
     } finally {
@@ -42,17 +44,40 @@ export default function Perfil() {
     loadData()
   }, [loadData])
 
-  const handleSave = async () => {
-    if (!user?.id) return
-    setSaving(true)
+  useEffect(() => {
+    const nome = user?.nome_completo || 'Colaborador'
+    setAvatarUrl(
+      user?.avatar ||
+        `https://img.usecurling.com/ppl/thumbnail?gender=male&seed=${encodeURIComponent(nome)}`,
+    )
+  }, [user?.avatar, user?.nome_completo])
+
+  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    const error = validateAvatarFile(file)
+    if (error) {
+      toast.error(error)
+      return
+    }
+
+    if (!token) {
+      toast.error('Sessão inválida. Faça login novamente.')
+      return
+    }
+
+    setUploading(true)
     try {
-      await updateUsuario(user.id, { nome_completo: nomeCompleto })
-      updateUser({ nome_completo: nomeCompleto })
-      toast.success('Perfil atualizado com sucesso!')
-    } catch {
-      toast.error('Erro ao atualizar perfil.')
+      const newAvatarUrl = await uploadAvatar(token, file)
+      setAvatarUrl(newAvatarUrl)
+      updateUser({ avatar: newAvatarUrl })
+      toast.success('Foto atualizada com sucesso!')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
     } finally {
-      setSaving(false)
+      setUploading(false)
     }
   }
 
@@ -65,9 +90,6 @@ export default function Perfil() {
   }
 
   const nome = user?.nome_completo || 'Colaborador'
-  const avatarUrl =
-    user?.avatar ||
-    `https://img.usecurling.com/ppl/thumbnail?gender=male&seed=${encodeURIComponent(nome)}`
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -78,23 +100,55 @@ export default function Perfil() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Perfil</h1>
           <p className="text-slate-500 mt-0.5 text-sm">
-            Visualize e atualize seus dados cadastrais.
+            Visualize seus dados cadastrais e atualize sua foto.
           </p>
         </div>
       </div>
 
       <Card className="border-slate-200">
         <CardContent className="p-6 space-y-6">
-          <div className="flex items-center gap-4">
-            <Avatar className="w-20 h-20">
-              <AvatarImage src={avatarUrl} />
-              <AvatarFallback className="text-lg">{getInitials(nome)}</AvatarFallback>
-            </Avatar>
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="relative group">
+              <Avatar className="w-20 h-20">
+                <AvatarImage src={avatarUrl} />
+                <AvatarFallback className="text-lg">{getInitials(nome)}</AvatarFallback>
+              </Avatar>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer disabled:cursor-not-allowed"
+                aria-label="Trocar foto"
+              >
+                {uploading ? (
+                  <Loader2 className="w-6 h-6 text-white animate-spin" />
+                ) : (
+                  <Camera className="w-6 h-6 text-white" />
+                )}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </div>
+            <div className="flex-1">
               <p className="text-xl font-bold text-slate-900">{nome}</p>
               <p className="text-sm text-slate-500">{user?.perfil || 'Colaborador'}</p>
               {user?.email && <p className="text-sm text-slate-500 mt-0.5">{user.email}</p>}
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Trocar foto
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -121,22 +175,15 @@ export default function Perfil() {
               <Label htmlFor="nome_completo">Nome Completo</Label>
               <Input
                 id="nome_completo"
-                value={nomeCompleto}
-                onChange={(e) => setNomeCompleto(e.target.value)}
-                className="h-11"
+                value={user?.nome_completo || ''}
+                readOnly
+                disabled
+                className="h-11 bg-slate-50 text-slate-600 cursor-not-allowed"
               />
+              <p className="text-xs text-slate-400">
+                O nome completo não pode ser alterado pelo portal.
+              </p>
             </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-primary hover:bg-primary/90 text-white gap-2"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Salvar Alterações
-            </Button>
           </div>
         </CardContent>
       </Card>
