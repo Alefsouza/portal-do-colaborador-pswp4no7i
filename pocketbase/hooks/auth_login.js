@@ -1,17 +1,17 @@
 routerAdd('POST', '/backend/v1/auth/login', (e) => {
   const body = e.requestInfo().body || {}
-  const registro = (body.registro || '').trim()
+  const cpf = (body.cpf || '').trim()
   const senha = body.senha || ''
 
-  if (!registro || !senha) {
-    return e.json(400, { error: 'Registro e senha são obrigatórios.' })
+  if (!cpf || !senha) {
+    return e.json(400, { error: 'CPF e senha são obrigatórios.' })
   }
 
   let usuario
   try {
-    usuario = $app.findFirstRecordByData('usuarios', 'registro', registro)
+    usuario = $app.findFirstRecordByData('usuarios', 'cpf', cpf)
   } catch (_) {
-    return e.json(401, { error: 'Registro ou senha incorretos.' })
+    return e.json(401, { error: 'CPF ou senha inválidos.' })
   }
 
   const storedSenha = usuario.getString('senha')
@@ -32,12 +32,12 @@ routerAdd('POST', '/backend/v1/auth/login', (e) => {
   }
 
   if (!valid) {
-    return e.json(401, { error: 'Registro ou senha incorretos.' })
+    return e.json(401, { error: 'CPF ou senha inválidos.' })
   }
 
   const jwtSecret = $secrets.get('PB_SUPERUSER_TOKEN') || 'portal-colaborador-secret'
   const token = $security.createJWT(
-    { id: usuario.id, registro: usuario.getString('registro') },
+    { id: usuario.id, cpf: usuario.getString('cpf') },
     jwtSecret,
     604800,
   )

@@ -73,7 +73,7 @@ export default function Dashboard() {
     <div className="space-y-8 animate-fade-in-up">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
-          Olá, {user?.nome_completo || 'Colaborador'}
+          Bem-vindo, {user?.nome_completo || 'Colaborador'}
         </h1>
         <p className="text-slate-500 mt-1">Bem-vindo ao Portal do Colaborador Via Sudeste.</p>
       </div>

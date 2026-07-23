@@ -63,7 +63,8 @@ export default function ChangePassword() {
             <Lock className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold text-white mb-2">Primeiro Acesso</h1>
-          <p className="text-green-100/80">Defina sua nova senha</p>
+          <p className="text-green-100/80">Olá, {user?.nome_completo}</p>
+          <p className="text-green-100/60 text-sm mt-1">Defina sua nova senha</p>
         </div>
 
         {error && (
@@ -74,7 +75,7 @@ export default function ChangePassword() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-white">Nova senha</label>
+            <label className="text-sm font-medium text-white">Nova Senha</label>
             <div className="relative">
               <Input
                 required
@@ -95,7 +96,7 @@ export default function ChangePassword() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-white">Confirmar senha</label>
+            <label className="text-sm font-medium text-white">Confirmar Nova Senha</label>
             <div className="relative">
               <Input
                 required

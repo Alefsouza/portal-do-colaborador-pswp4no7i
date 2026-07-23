@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 export default function Login() {
   const { isAuthenticated, needsPasswordChange, login } = useAuth()
   const navigate = useNavigate()
-  const [registro, setRegistro] = useState('')
+  const [cpf, setCpf] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -24,20 +24,20 @@ export default function Login() {
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false)
 
   if (isAuthenticated) {
-    return <Navigate to={needsPasswordChange ? '/alterar-senha' : '/dashboard'} replace />
+    return <Navigate to={needsPasswordChange ? '/trocar-senha' : '/dashboard'} replace />
   }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setIsLoading(true)
-    const result = await login(registro, password)
+    const result = await login(cpf, password)
     setIsLoading(false)
 
     if (result.error) {
       setError(result.error)
     } else if (result.user?.primeiro_acesso) {
-      navigate('/alterar-senha')
+      navigate('/trocar-senha')
     } else {
       navigate('/dashboard')
     }
@@ -74,12 +74,12 @@ export default function Login() {
 
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-white">Registro</label>
+              <label className="text-sm font-medium text-white">CPF</label>
               <Input
                 required
-                value={registro}
-                onChange={(e) => setRegistro(e.target.value)}
-                placeholder="Digite seu registro"
+                value={cpf}
+                onChange={(e) => setCpf(e.target.value)}
+                placeholder="Digite seu CPF"
                 className="bg-white/90 border-0 focus-visible:ring-primary h-12 text-slate-900"
               />
             </div>
@@ -92,7 +92,7 @@ export default function Login() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="Digite sua senha"
                   className="bg-white/90 border-0 focus-visible:ring-primary h-12 pr-10 text-slate-900"
                 />
                 <button

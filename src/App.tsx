@@ -14,7 +14,7 @@ import Layout from './components/Layout'
 function ProtectedRoute() {
   const { isAuthenticated, needsPasswordChange } = useAuth()
   if (!isAuthenticated) return <Navigate to="/" replace />
-  if (needsPasswordChange) return <Navigate to="/alterar-senha" replace />
+  if (needsPasswordChange) return <Navigate to="/trocar-senha" replace />
   return <Outlet />
 }
 
@@ -26,7 +26,7 @@ const App = () => (
         <Sonner />
         <Routes>
           <Route path="/" element={<Login />} />
-          <Route path="/alterar-senha" element={<ChangePassword />} />
+          <Route path="/trocar-senha" element={<ChangePassword />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />

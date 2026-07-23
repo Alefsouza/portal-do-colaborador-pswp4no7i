@@ -15,11 +15,11 @@ export interface LoginResponse {
 
 const API_URL = import.meta.env.VITE_POCKETBASE_URL
 
-export async function login(registro: string, senha: string): Promise<LoginResponse> {
+export async function login(cpf: string, senha: string): Promise<LoginResponse> {
   const res = await fetch(`${API_URL}/backend/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ registro, senha }),
+    body: JSON.stringify({ cpf, senha }),
   })
   const data = await res.json()
   if (!res.ok) throw data

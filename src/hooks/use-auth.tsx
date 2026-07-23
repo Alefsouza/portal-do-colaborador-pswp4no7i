@@ -13,10 +13,7 @@ interface AuthContextType {
   token: string | null
   isAuthenticated: boolean
   needsPasswordChange: boolean
-  login: (
-    registro: string,
-    senha: string,
-  ) => Promise<{ error: string | null; user: AuthUser | null }>
+  login: (cpf: string, senha: string) => Promise<{ error: string | null; user: AuthUser | null }>
   changePassword: (novaSenha: string) => Promise<{ error: string | null }>
   logout: () => void
   loading: boolean
@@ -41,9 +38,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   })
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY))
 
-  const login = async (registro: string, senha: string) => {
+  const login = async (cpf: string, senha: string) => {
     try {
-      const result = await loginApi(registro, senha)
+      const result = await loginApi(cpf, senha)
       localStorage.setItem(TOKEN_KEY, result.token)
       localStorage.setItem(USER_KEY, JSON.stringify(result.user))
       setToken(result.token)
