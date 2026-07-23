@@ -11,11 +11,11 @@ export interface Solicitacao {
   updated: string
 }
 
-export async function listSolicitacoes(userId: string): Promise<Solicitacao[]> {
-  return (await pb.collection('solicitacoes').getFullList({
+export async function listSolicitacoes(userId: string, page = 1, perPage = 10) {
+  return pb.collection('solicitacoes').getList<Solicitacao>(page, perPage, {
     filter: `id_usuario = "${userId}"`,
     sort: '-created',
-  })) as Solicitacao[]
+  })
 }
 
 export async function createSolicitacao(data: {
@@ -26,6 +26,6 @@ export async function createSolicitacao(data: {
 }): Promise<Solicitacao> {
   return (await pb.collection('solicitacoes').create({
     ...data,
-    status: 'Pendente',
+    status: 'Solicitada',
   })) as Solicitacao
 }
