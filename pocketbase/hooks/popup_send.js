@@ -36,25 +36,16 @@ routerAdd('POST', '/backend/v1/popups/send', (e) => {
   const recipientType = body.recipientType || 'all'
   const departamento = body.departamento || ''
   const userIds = body.userIds || []
+  const userId = body.userId || ''
 
   if (!titulo || !conteudo) {
     return e.json(400, { error: 'Título e conteúdo são obrigatórios.' })
   }
 
-  let informativoId = ''
   let recipientCount = 0
 
   try {
     $app.runInTransaction((txApp) => {
-      const informativosCol = txApp.findCollectionByNameOrId('informativos')
-      const informativo = new Record(informativosCol)
-      informativo.set('titulo', titulo)
-      informativo.set('conteudo', conteudo)
-      informativo.set('departamento', recipientType === 'department' ? departamento : '')
-      informativo.set('status_ativo', true)
-      txApp.save(informativo)
-      informativoId = informativo.id
-
       let targetUsers = []
       if (recipientType === 'all') {
         targetUsers = txApp.findRecordsByFilter('usuarios', "id != ''", '', 0, 0)
@@ -72,12 +63,17 @@ routerAdd('POST', '/backend/v1/popups/send', (e) => {
             targetUsers.push(txApp.findRecordById('usuarios', uid))
           } catch (_) {}
         }
+      } else if (recipientType === 'single' && userId) {
+        try {
+          targetUsers.push(txApp.findRecordById('usuarios', userId))
+        } catch (_) {}
       }
 
       const popupCol = txApp.findCollectionByNameOrId('popup_envios')
       for (const user of targetUsers) {
         const popup = new Record(popupCol)
-        popup.set('id_informativo', informativo.id)
+        popup.set('titulo', titulo)
+        popup.set('conteudo', conteudo)
         popup.set('id_usuario', user.id)
         popup.set('status_lido', false)
         txApp.save(popup)
@@ -87,7 +83,6 @@ routerAdd('POST', '/backend/v1/popups/send', (e) => {
 
     return e.json(200, {
       success: true,
-      informativoId: informativoId,
       recipients: recipientCount,
     })
   } catch (err) {

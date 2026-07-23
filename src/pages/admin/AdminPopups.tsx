@@ -1,12 +1,15 @@
-import { useState, useEffect, type FormEvent } from 'react'
-import { Loader2, Send } from 'lucide-react'
+import { useState, useEffect, useCallback, type FormEvent } from 'react'
+import { Loader2, Plus, Send, Megaphone } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
-import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Select,
   SelectContent,
@@ -14,83 +17,157 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useAdminAuth } from '@/hooks/use-admin-auth'
-import { sendPopup } from '@/services/admin-popups'
 import {
-  getDistinctDepartamentos,
-  listUsuariosForSelect,
-  type UsuarioSelect,
-} from '@/services/admin-usuarios'
-import { UserMultiSelect } from '@/components/admin/UserMultiSelect'
-
-type RecipientType = 'all' | 'department' | 'specific'
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useRealtime } from '@/hooks/use-realtime'
+import { listPopups, createPopup, type PopupEnvioAdmin } from '@/services/admin-popups'
+import { listUsuariosForSelect, type UsuarioSelect } from '@/services/admin-usuarios'
 
 export default function AdminPopups() {
-  const { token } = useAdminAuth()
+  const [items, setItems] = useState<PopupEnvioAdmin[]>([])
+  const [users, setUsers] = useState<UsuarioSelect[]>([])
+  const [loading, setLoading] = useState(true)
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [titulo, setTitulo] = useState('')
   const [conteudo, setConteudo] = useState('')
-  const [recipientType, setRecipientType] = useState<RecipientType>('all')
-  const [departamento, setDepartamento] = useState('')
-  const [userIds, setUserIds] = useState<string[]>([])
-  const [departments, setDepartments] = useState<string[]>([])
-  const [users, setUsers] = useState<UsuarioSelect[]>([])
+  const [userId, setUserId] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      setItems(await listPopups())
+    } catch {
+      /* ignored */
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
-    getDistinctDepartamentos()
-      .then(setDepartments)
-      .catch(() => {})
+    loadData()
     listUsuariosForSelect()
       .then(setUsers)
       .catch(() => {})
-  }, [])
+  }, [loadData])
+
+  useRealtime('popup_envios', () => {
+    loadData()
+  })
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!token) return
-    if (!titulo.trim() || !conteudo.trim()) {
+    if (!titulo.trim() || !conteudo.trim() || !userId) {
       toast.error('Preencha todos os campos obrigatórios.')
-      return
-    }
-    if (recipientType === 'department' && !departamento) {
-      toast.error('Selecione um departamento.')
-      return
-    }
-    if (recipientType === 'specific' && userIds.length === 0) {
-      toast.error('Selecione ao menos um colaborador.')
       return
     }
     setSubmitting(true)
     try {
-      const result = await sendPopup(token, {
-        titulo,
-        conteudo,
-        recipientType,
-        departamento: recipientType === 'department' ? departamento : undefined,
-        userIds: recipientType === 'specific' ? userIds : undefined,
-      })
-      toast.success(`Pop-up enviado para ${result.recipients} colaborador(es)!`)
+      await createPopup({ titulo, conteudo, id_usuario: userId })
+      toast.success('Pop-up enviado com sucesso!')
       setTitulo('')
       setConteudo('')
-      setRecipientType('all')
-      setDepartamento('')
-      setUserIds([])
+      setUserId('')
+      setDialogOpen(false)
+      loadData()
     } catch {
-      toast.error('Erro ao enviar pop-up.')
+      toast.error('Erro ao criar pop-up.')
     } finally {
       setSubmitting(false)
     }
   }
 
+  if (loading && items.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 animate-fade-in-up">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Pop-ups</h1>
-        <p className="text-slate-500 mt-1">Envie notificações para os colaboradores</p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Pop-ups</h1>
+          <p className="text-slate-500 mt-1">Envie notificações para os colaboradores</p>
+        </div>
+        <Button
+          onClick={() => setDialogOpen(true)}
+          className="bg-primary hover:bg-primary/90 text-white gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Criar Pop-up
+        </Button>
       </div>
-      <Card className="border-slate-200 max-w-2xl">
-        <CardContent className="p-6">
-          <form onSubmit={handleSubmit} className="space-y-5">
+
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+            <Megaphone className="w-8 h-8 text-primary" />
+          </div>
+          <p className="text-slate-500">Nenhum pop-up enviado.</p>
+        </div>
+      ) : (
+        <Card className="border-slate-200">
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-primary/5 hover:bg-primary/5">
+                  <TableHead className="font-bold text-primary">Título</TableHead>
+                  <TableHead className="font-bold text-primary">Conteúdo</TableHead>
+                  <TableHead className="font-bold text-primary">Usuário</TableHead>
+                  <TableHead className="font-bold text-primary">Status</TableHead>
+                  <TableHead className="font-bold text-primary">Data</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                  <TableRow key={item.id} className="border-slate-100 hover:bg-primary/5">
+                    <TableCell className="font-medium text-slate-900">
+                      {item.titulo || '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-500 max-w-xs truncate">
+                      {item.conteudo || '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-600">
+                      {item.expand?.id_usuario?.nome_completo || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          item.status_lido
+                            ? 'bg-green-100 text-green-700 border-green-200'
+                            : 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                        }
+                      >
+                        {item.status_lido ? 'Lido' : 'Não lido'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-600 whitespace-nowrap">
+                      {format(parseISO(item.created), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-900">Criar Pop-up</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="popup-titulo">Título *</Label>
               <Input
@@ -104,59 +181,31 @@ export default function AdminPopups() {
               <Label htmlFor="popup-conteudo">Conteúdo *</Label>
               <Textarea
                 id="popup-conteudo"
-                rows={5}
+                rows={4}
                 value={conteudo}
                 onChange={(e) => setConteudo(e.target.value)}
                 placeholder="Digite o conteúdo da mensagem"
               />
             </div>
             <div className="space-y-2">
-              <Label>Destinatários *</Label>
-              <RadioGroup
-                value={recipientType}
-                onValueChange={(v) => setRecipientType(v as RecipientType)}
-              >
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="all" id="r-all" />
-                  <Label htmlFor="r-all">Todos os colaboradores</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="department" id="r-dept" />
-                  <Label htmlFor="r-dept">Por departamento</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="specific" id="r-spec" />
-                  <Label htmlFor="r-spec">Colaboradores específicos</Label>
-                </div>
-              </RadioGroup>
+              <Label>Usuário *</Label>
+              <Select value={userId} onValueChange={setUserId}>
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Selecione o usuário" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nome_completo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            {recipientType === 'department' && (
-              <div className="space-y-2">
-                <Label>Departamento *</Label>
-                <Select value={departamento} onValueChange={setDepartamento}>
-                  <SelectTrigger className="h-11">
-                    <SelectValue placeholder="Selecione o departamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((d) => (
-                      <SelectItem key={d} value={d}>
-                        {d}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {recipientType === 'specific' && (
-              <div className="space-y-2">
-                <Label>Colaboradores *</Label>
-                <UserMultiSelect users={users} selected={userIds} onChange={setUserIds} />
-              </div>
-            )}
             <Button
               type="submit"
               disabled={submitting}
-              className="bg-primary hover:bg-primary/90 text-white gap-2"
+              className="bg-primary hover:bg-primary/90 text-white gap-2 w-full"
             >
               {submitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -166,8 +215,8 @@ export default function AdminPopups() {
               Enviar Pop-up
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

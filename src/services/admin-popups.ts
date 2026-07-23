@@ -1,29 +1,41 @@
-const API_URL = import.meta.env.VITE_POCKETBASE_URL
+import pb from '@/lib/pocketbase/client'
 
-export interface SendPopupData {
+export interface PopupEnvioAdmin {
+  id: string
   titulo: string
   conteudo: string
-  recipientType: 'all' | 'department' | 'specific'
-  departamento?: string
-  userIds?: string[]
+  id_usuario: string
+  status_lido: boolean
+  created: string
+  expand?: {
+    id_usuario?: {
+      id: string
+      nome_completo: string
+      departamento: string
+    }
+  }
 }
 
-export interface SendPopupResult {
-  success: boolean
-  informativoId: string
-  recipients: number
-}
-
-export async function sendPopup(token: string, data: SendPopupData): Promise<SendPopupResult> {
-  const res = await fetch(`${API_URL}/backend/v1/popups/send`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(data),
+export async function listPopups(): Promise<PopupEnvioAdmin[]> {
+  return await pb.collection('popup_envios').getFullList({
+    sort: '-created',
+    expand: 'id_usuario',
   })
-  const result = await res.json()
-  if (!res.ok) throw result
-  return result as SendPopupResult
+}
+
+export async function createPopup(data: {
+  titulo: string
+  conteudo: string
+  id_usuario: string
+}): Promise<PopupEnvioAdmin> {
+  return await pb.collection('popup_envios').create({
+    titulo: data.titulo,
+    conteudo: data.conteudo,
+    id_usuario: data.id_usuario,
+    status_lido: false,
+  })
+}
+
+export async function deletePopup(id: string): Promise<void> {
+  await pb.collection('popup_envios').delete(id)
 }

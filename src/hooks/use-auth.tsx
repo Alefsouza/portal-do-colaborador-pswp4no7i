@@ -43,6 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const result = await loginApi(cpf, senha)
       localStorage.setItem(TOKEN_KEY, result.token)
+      localStorage.setItem('loginTimestamp', new Date().toISOString())
       localStorage.setItem(USER_KEY, JSON.stringify(result.user))
       setToken(result.token)
       setUser(result.user)
@@ -80,6 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
+    localStorage.removeItem('loginTimestamp')
     setToken(null)
     setUser(null)
   }

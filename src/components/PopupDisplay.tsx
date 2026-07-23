@@ -10,49 +10,54 @@ export function PopupDisplay({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!userId) return
-    getUnreadPopups(userId)
+    if (!userId) {
+      setLoading(false)
+      return
+    }
+    const loginTimestamp = localStorage.getItem('loginTimestamp')
+    if (!loginTimestamp) {
+      setLoading(false)
+      return
+    }
+    const sessionKey = `popups_shown_${loginTimestamp}`
+    if (sessionStorage.getItem(sessionKey)) {
+      setLoading(false)
+      return
+    }
+    getUnreadPopups(userId, loginTimestamp)
       .then(setPopups)
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [userId])
 
   const current = popups[currentIndex]
-  const open = !!current?.expand?.id_informativo
+  const open = !!current
 
-  const handleClose = useCallback(async () => {
+  const handleMarkAsRead = useCallback(() => {
     if (current) {
-      try {
-        await markPopupAsRead(current.id)
-      } catch {
-        /* intentionally ignored */
+      markPopupAsRead(current.id).catch(() => {})
+    }
+    if (currentIndex < popups.length - 1) {
+      setCurrentIndex((i) => i + 1)
+    } else {
+      setPopups([])
+      setCurrentIndex(0)
+      const loginTimestamp = localStorage.getItem('loginTimestamp')
+      if (loginTimestamp) {
+        sessionStorage.setItem(`popups_shown_${loginTimestamp}`, 'true')
       }
     }
-    setPopups([])
-    setCurrentIndex(0)
-  }, [current])
+  }, [current, currentIndex, popups.length])
 
-  const handleNext = useCallback(async () => {
-    if (current) {
-      try {
-        await markPopupAsRead(current.id)
-      } catch {
-        /* intentionally ignored */
-      }
-    }
-    setCurrentIndex((i) => i + 1)
-  }, [current])
+  if (loading || !current) return null
 
-  if (loading || !current?.expand?.id_informativo) return null
-
-  const info = current.expand.id_informativo
   const hasMore = currentIndex < popups.length - 1
 
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (!o) handleClose()
+        if (!o) handleMarkAsRead()
       }}
     >
       <DialogContent className="max-w-md">
@@ -61,19 +66,22 @@ export function PopupDisplay({ userId }: { userId: string }) {
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Megaphone className="w-5 h-5 text-primary" />
             </div>
-            <DialogTitle className="text-lg font-bold text-slate-900">{info.titulo}</DialogTitle>
+            <DialogTitle className="text-lg font-bold text-slate-900">{current.titulo}</DialogTitle>
           </div>
           <p className="text-slate-600 whitespace-pre-wrap text-sm leading-relaxed">
-            {info.conteudo}
+            {current.conteudo}
           </p>
         </DialogHeader>
-        {hasMore && (
-          <div className="flex justify-end mt-4">
-            <Button onClick={handleNext} variant="outline" className="gap-2">
+        <div className="flex justify-end mt-4 gap-2">
+          {hasMore && (
+            <Button onClick={handleMarkAsRead} variant="outline">
               Próximo
             </Button>
-          </div>
-        )}
+          )}
+          <Button onClick={handleMarkAsRead} className="bg-primary hover:bg-primary/90 text-white">
+            Marcar como lido
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   )

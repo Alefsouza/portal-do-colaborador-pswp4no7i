@@ -8,22 +8,19 @@ export interface DashboardCounts {
 }
 
 export async function getDashboardCounts(departamento: string): Promise<DashboardCounts> {
-  const [sols, agends, infos, popups] = await Promise.all([
-    pb.collection('solicitacoes').getList(1, 1, {
-      filter: `departamento = "${departamento}"`,
-    }),
-    pb.collection('agendamentos').getList(1, 1, {
-      filter: `departamento = "${departamento}"`,
-    }),
-    pb.collection('informativos').getList(1, 1, {
-      filter: 'status_ativo = true',
-    }),
+  const deptFilter = `departamento = "${departamento}"`
+
+  const [solicitacoes, agendamentos, informativos, popupEnvios] = await Promise.all([
+    pb.collection('solicitacoes').getList(1, 1, { filter: deptFilter }),
+    pb.collection('agendamentos').getList(1, 1, { filter: deptFilter }),
+    pb.collection('informativos').getList(1, 1, { filter: 'status_ativo = true' }),
     pb.collection('popup_envios').getList(1, 1),
   ])
+
   return {
-    solicitacoes: sols.totalItems,
-    agendamentos: agends.totalItems,
-    informativos: infos.totalItems,
-    popupEnvios: popups.totalItems,
+    solicitacoes: solicitacoes.totalItems,
+    agendamentos: agendamentos.totalItems,
+    informativos: informativos.totalItems,
+    popupEnvios: popupEnvios.totalItems,
   }
 }
