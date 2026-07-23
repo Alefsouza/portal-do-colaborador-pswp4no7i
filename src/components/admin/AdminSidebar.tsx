@@ -43,7 +43,7 @@ function NavItem({ to, label, icon: Icon, onNavigate }: NavItemProps) {
 }
 
 export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const { logout } = useAdminAuth()
+  const { logout, user } = useAdminAuth()
   const navigate = useNavigate()
 
   const adminNav = [
