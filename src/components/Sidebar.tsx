@@ -1,16 +1,6 @@
 import { useLocation, Link } from 'react-router-dom'
 import type { ElementType } from 'react'
-import {
-  Bus,
-  Home,
-  Gauge,
-  Receipt,
-  ClipboardList,
-  CalendarClock,
-  Wrench,
-  User,
-  Settings,
-} from 'lucide-react'
+import { Bus, Home, Gauge, Receipt, ClipboardList, CalendarClock, Wrench, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface NavItemProps {
@@ -50,10 +40,7 @@ const mainNav = [
   { label: 'Serviços', path: '/servicos', icon: Wrench },
 ]
 
-const bottomNav = [
-  { label: 'Perfil', path: '/perfil', icon: User },
-  { label: 'Configurações', path: '/configuracoes', icon: Settings },
-]
+const bottomNav = [{ label: 'Perfil', path: '/perfil', icon: User }]
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (

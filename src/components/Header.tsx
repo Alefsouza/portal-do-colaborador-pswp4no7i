@@ -1,4 +1,4 @@
-import { Menu, Bell, Bus, LogOut, ChevronDown, ShieldCheck } from 'lucide-react'
+import { Menu, Bell, Bus, LogOut, ChevronDown, ShieldCheck, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -81,6 +81,10 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>{nome}</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate('/perfil')} className="cursor-pointer">
+              <UserRound className="w-4 h-4 mr-2" />
+              Perfil
+            </DropdownMenuItem>
             {hasAdminAccess && (
               <DropdownMenuItem
                 onClick={() => navigate('/admin/dashboard')}

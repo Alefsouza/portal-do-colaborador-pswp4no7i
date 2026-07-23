@@ -5,8 +5,18 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/hooks/use-auth'
 import { getUsuario, updateUsuario, type Usuario } from '@/services/usuarios'
+
+function getInitials(name: string) {
+  return name
+    .split(' ')
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+}
 
 export default function Perfil() {
   const { user, updateUser } = useAuth()
@@ -54,6 +64,11 @@ export default function Perfil() {
     )
   }
 
+  const nome = user?.nome_completo || 'Colaborador'
+  const avatarUrl =
+    user?.avatar ||
+    `https://img.usecurling.com/ppl/thumbnail?gender=male&seed=${encodeURIComponent(nome)}`
+
   return (
     <div className="space-y-6 animate-fade-in-up">
       <div className="flex items-center gap-3">
@@ -70,6 +85,18 @@ export default function Perfil() {
 
       <Card className="border-slate-200">
         <CardContent className="p-6 space-y-6">
+          <div className="flex items-center gap-4">
+            <Avatar className="w-20 h-20">
+              <AvatarImage src={avatarUrl} />
+              <AvatarFallback className="text-lg">{getInitials(nome)}</AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="text-xl font-bold text-slate-900">{nome}</p>
+              <p className="text-sm text-slate-500">{user?.perfil || 'Colaborador'}</p>
+              {user?.email && <p className="text-sm text-slate-500 mt-0.5">{user.email}</p>}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label className="text-slate-500 text-sm">CPF</Label>
@@ -84,8 +111,8 @@ export default function Perfil() {
               <p className="font-semibold text-slate-900">{usuario?.departamento || '-'}</p>
             </div>
             <div className="space-y-2">
-              <Label className="text-slate-500 text-sm">Perfil</Label>
-              <p className="font-semibold text-slate-900">{usuario?.perfil || '-'}</p>
+              <Label className="text-slate-500 text-sm">E-mail</Label>
+              <p className="font-semibold text-slate-900">{user?.email || '-'}</p>
             </div>
           </div>
 
