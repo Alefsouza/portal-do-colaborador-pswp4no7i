@@ -51,8 +51,8 @@ const mainNav = [
 ]
 
 const bottomNav = [
-  { label: 'Perfil', path: '/dashboard', icon: User },
-  { label: 'Configurações', path: '/dashboard', icon: Settings },
+  { label: 'Perfil', path: '/perfil', icon: User },
+  { label: 'Configurações', path: '/configuracoes', icon: Settings },
 ]
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

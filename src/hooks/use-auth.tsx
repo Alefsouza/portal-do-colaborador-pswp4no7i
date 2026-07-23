@@ -16,6 +16,7 @@ interface AuthContextType {
   login: (cpf: string, senha: string) => Promise<{ error: string | null; user: AuthUser | null }>
   changePassword: (novaSenha: string) => Promise<{ error: string | null }>
   logout: () => void
+  updateUser: (updates: Partial<AuthUser>) => void
   loading: boolean
 }
 
@@ -68,6 +69,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
+  const updateUser = (updates: Partial<AuthUser>) => {
+    const updatedUser = user ? { ...user, ...updates } : null
+    if (updatedUser) {
+      localStorage.setItem(USER_KEY, JSON.stringify(updatedUser))
+      setUser(updatedUser)
+    }
+  }
+
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
@@ -85,6 +94,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         login,
         changePassword,
         logout,
+        updateUser,
         loading: false,
       }}
     >

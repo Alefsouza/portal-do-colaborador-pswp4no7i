@@ -17,6 +17,7 @@ routerAdd('POST', '/backend/v1/auth/change-password', (e) => {
   const userId = payload.id
   const body = e.requestInfo().body || {}
   const novaSenha = body.nova_senha || ''
+  const senhaAtual = body.senha_atual || ''
 
   if (!novaSenha || novaSenha.length < 8) {
     return e.json(400, { error: 'A senha deve ter no mínimo 8 caracteres.' })
@@ -27,6 +28,19 @@ routerAdd('POST', '/backend/v1/auth/change-password', (e) => {
     usuario = $app.findRecordById('usuarios', userId)
   } catch (_) {
     return e.json(404, { error: 'Usuário não encontrado.' })
+  }
+
+  if (senhaAtual) {
+    const storedSenha = usuario.getString('senha')
+    const parts = storedSenha.split('$')
+    if (parts.length === 2) {
+      const saltStored = parts[0]
+      const storedHash = parts[1]
+      const inputHash = $security.sha256(saltStored + senhaAtual)
+      if (inputHash !== storedHash) {
+        return e.json(400, { error: 'Senha atual incorreta.' })
+      }
+    }
   }
 
   const salt = $security.randomString(16)

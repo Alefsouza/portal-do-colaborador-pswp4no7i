@@ -26,11 +26,15 @@ export async function login(cpf: string, senha: string): Promise<LoginResponse> 
   return data as LoginResponse
 }
 
-export async function changePassword(token: string, novaSenha: string): Promise<void> {
+export async function changePassword(
+  token: string,
+  novaSenha: string,
+  senhaAtual?: string,
+): Promise<void> {
   const res = await fetch(`${API_URL}/backend/v1/auth/change-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: token },
-    body: JSON.stringify({ nova_senha: novaSenha }),
+    body: JSON.stringify({ nova_senha: novaSenha, senha_atual: senhaAtual || '' }),
   })
   const data = await res.json()
   if (!res.ok) throw data

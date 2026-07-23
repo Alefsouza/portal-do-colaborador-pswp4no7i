@@ -11,7 +11,12 @@ import ChangePassword from './pages/ChangePassword'
 import Telemetria from './pages/Telemetria'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
-import Placeholder from './pages/Placeholder'
+import Recibos from './pages/Recibos'
+import Solicitacoes from './pages/Solicitacoes'
+import Agendamentos from './pages/Agendamentos'
+import Servicos from './pages/Servicos'
+import Perfil from './pages/Perfil'
+import Configuracoes from './pages/Configuracoes'
 
 function ProtectedRoute() {
   const { isAuthenticated, needsPasswordChange } = useAuth()
@@ -35,10 +40,12 @@ const App = () => (
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/telemetria" element={<Telemetria />} />
-              <Route path="/recibos" element={<Placeholder title="Recibos" />} />
-              <Route path="/solicitacoes" element={<Placeholder title="Solicitações" />} />
-              <Route path="/agendamentos" element={<Placeholder title="Agendamentos" />} />
-              <Route path="/servicos" element={<Placeholder title="Serviços" />} />
+              <Route path="/recibos" element={<Recibos />} />
+              <Route path="/solicitacoes" element={<Solicitacoes />} />
+              <Route path="/agendamentos" element={<Agendamentos />} />
+              <Route path="/servicos" element={<Servicos />} />
+              <Route path="/perfil" element={<Perfil />} />
+              <Route path="/configuracoes" element={<Configuracoes />} />
             </Route>
           </Route>
           <Route path="*" element={<NotFound />} />
