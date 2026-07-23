@@ -22,7 +22,10 @@ import Configuracoes from './pages/Configuracoes'
 import AdminLogin from './pages/admin/AdminLogin'
 import AdminLayout from './components/admin/AdminLayout'
 import AdminDashboard from './pages/admin/AdminDashboard'
-import AdminPlaceholder from './pages/admin/AdminPlaceholder'
+import AdminSolicitacoes from './pages/admin/AdminSolicitacoes'
+import AdminAgendamentos from './pages/admin/AdminAgendamentos'
+import AdminInformativos from './pages/admin/AdminInformativos'
+import AdminPopups from './pages/admin/AdminPopups'
 
 function ProtectedRoute() {
   const { isAuthenticated, needsPasswordChange } = useAuth()
@@ -65,19 +68,10 @@ const App = () => (
             <Route element={<AdminProtectedRoute />}>
               <Route element={<AdminLayout />}>
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                <Route
-                  path="/admin/solicitacoes"
-                  element={<AdminPlaceholder title="Solicitações" />}
-                />
-                <Route
-                  path="/admin/agendamentos"
-                  element={<AdminPlaceholder title="Agendamentos" />}
-                />
-                <Route
-                  path="/admin/informativos"
-                  element={<AdminPlaceholder title="Informativos" />}
-                />
-                <Route path="/admin/pop-ups" element={<AdminPlaceholder title="Pop-ups" />} />
+                <Route path="/admin/solicitacoes" element={<AdminSolicitacoes />} />
+                <Route path="/admin/agendamentos" element={<AdminAgendamentos />} />
+                <Route path="/admin/informativos" element={<AdminInformativos />} />
+                <Route path="/admin/popups" element={<AdminPopups />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />

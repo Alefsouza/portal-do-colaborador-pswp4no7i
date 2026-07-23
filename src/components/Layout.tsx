@@ -3,9 +3,12 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from '@/components/Sidebar'
 import { Header } from '@/components/Header'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { useAuth } from '@/hooks/use-auth'
+import { PopupDisplay } from '@/components/PopupDisplay'
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { user } = useAuth()
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -26,6 +29,8 @@ export default function Layout() {
           <Sidebar onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
       </Sheet>
+
+      {user?.id && <PopupDisplay userId={user.id} />}
     </div>
   )
 }

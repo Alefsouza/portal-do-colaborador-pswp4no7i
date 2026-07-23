@@ -1,0 +1,30 @@
+import pb from '@/lib/pocketbase/client'
+
+export interface AdminSolicitacao {
+  id: string
+  id_usuario: string
+  titulo: string
+  descricao: string
+  status: string
+  created: string
+  updated: string
+  expand?: {
+    id_usuario?: {
+      id: string
+      nome_completo: string
+      cpf: string
+    }
+  }
+}
+
+export async function listAdminSolicitacoes(departamento: string): Promise<AdminSolicitacao[]> {
+  return (await pb.collection('solicitacoes').getFullList({
+    filter: `departamento = "${departamento}"`,
+    sort: '-created',
+    expand: 'id_usuario',
+  })) as AdminSolicitacao[]
+}
+
+export async function updateSolicitacaoStatus(id: string, status: string): Promise<void> {
+  await pb.collection('solicitacoes').update(id, { status })
+}

@@ -46,7 +46,7 @@ const adminNav = [
   { label: 'Solicitações', path: '/admin/solicitacoes', icon: ClipboardList },
   { label: 'Agendamentos', path: '/admin/agendamentos', icon: CalendarClock },
   { label: 'Informativos', path: '/admin/informativos', icon: Megaphone },
-  { label: 'Pop-ups', path: '/admin/pop-ups', icon: Bell },
+  { label: 'Pop-ups', path: '/admin/popups', icon: Bell },
 ]
 
 export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {

@@ -1,7 +1,8 @@
-import { ClipboardList, CalendarClock, Megaphone, Bell } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ClipboardList, CalendarClock, Megaphone, Bell, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { getDashboardCards } from '@/lib/admin/mockData'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
+import { getDashboardCounts, type DashboardCounts } from '@/services/admin-data'
 import type { ComponentType } from 'react'
 
 const iconMap: Record<string, ComponentType<{ className?: string }>> = {
@@ -11,9 +12,40 @@ const iconMap: Record<string, ComponentType<{ className?: string }>> = {
   Bell,
 }
 
+const cards = [
+  {
+    id: 'solicitacoes',
+    label: 'Solicitações',
+    icon: 'ClipboardList',
+    key: 'solicitacoes' as const,
+  },
+  {
+    id: 'agendamentos',
+    label: 'Agendamentos',
+    icon: 'CalendarClock',
+    key: 'agendamentos' as const,
+  },
+  {
+    id: 'informativos',
+    label: 'Informativos Ativos',
+    icon: 'Megaphone',
+    key: 'informativos' as const,
+  },
+  { id: 'popups', label: 'Pop-ups Enviados', icon: 'Bell', key: 'popupEnvios' as const },
+]
+
 export default function AdminDashboard() {
   const { user } = useAdminAuth()
-  const cards = getDashboardCards()
+  const [counts, setCounts] = useState<DashboardCounts | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user?.departamento) return
+    getDashboardCounts(user.departamento)
+      .then(setCounts)
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [user?.departamento])
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -37,7 +69,13 @@ export default function AdminDashboard() {
                   <Icon className="w-6 h-6 text-primary" />
                 </div>
                 <p className="text-sm text-slate-500 font-medium mb-1">{card.label}</p>
-                <p className="text-3xl font-bold text-slate-900">{card.value}</p>
+                <p className="text-3xl font-bold text-slate-900">
+                  {loading ? (
+                    <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                  ) : (
+                    (counts?.[card.key] ?? 0)
+                  )}
+                </p>
               </CardContent>
             </Card>
           )
