@@ -11,6 +11,7 @@ import ChangePassword from './pages/ChangePassword'
 import Telemetria from './pages/Telemetria'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
+import Placeholder from './pages/Placeholder'
 
 function ProtectedRoute() {
   const { isAuthenticated, needsPasswordChange } = useAuth()
