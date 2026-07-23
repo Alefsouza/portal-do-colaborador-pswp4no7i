@@ -3,6 +3,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
+import { AdminAuthProvider, useAdminAuth } from '@/hooks/use-admin-auth'
 
 import Login from './pages/Login'
 import EsqueciSenha from './pages/EsqueciSenha'
@@ -18,6 +19,11 @@ import Servicos from './pages/Servicos'
 import Perfil from './pages/Perfil'
 import Configuracoes from './pages/Configuracoes'
 
+import AdminLogin from './pages/admin/AdminLogin'
+import AdminLayout from './components/admin/AdminLayout'
+import AdminDashboard from './pages/admin/AdminDashboard'
+import AdminPlaceholder from './pages/admin/AdminPlaceholder'
+
 function ProtectedRoute() {
   const { isAuthenticated, needsPasswordChange } = useAuth()
   if (!isAuthenticated) return <Navigate to="/" replace />
@@ -25,32 +31,59 @@ function ProtectedRoute() {
   return <Outlet />
 }
 
+function AdminProtectedRoute() {
+  const { isAuthenticated } = useAdminAuth()
+  if (!isAuthenticated) return <Navigate to="/admin" replace />
+  return <Outlet />
+}
+
 const App = () => (
   <BrowserRouter>
     <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/login" element={<Navigate to="/" replace />} />
-          <Route path="/esqueci-senha" element={<EsqueciSenha />} />
-          <Route path="/trocar-senha" element={<ChangePassword />} />
-          <Route element={<ProtectedRoute />}>
-            <Route element={<Layout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/telemetria" element={<Telemetria />} />
-              <Route path="/recibos" element={<Recibos />} />
-              <Route path="/solicitacoes" element={<Solicitacoes />} />
-              <Route path="/agendamentos" element={<Agendamentos />} />
-              <Route path="/servicos" element={<Servicos />} />
-              <Route path="/perfil" element={<Perfil />} />
-              <Route path="/configuracoes" element={<Configuracoes />} />
+      <AdminAuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <Routes>
+            <Route path="/" element={<Login />} />
+            <Route path="/login" element={<Navigate to="/" replace />} />
+            <Route path="/esqueci-senha" element={<EsqueciSenha />} />
+            <Route path="/trocar-senha" element={<ChangePassword />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<Layout />}>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/telemetria" element={<Telemetria />} />
+                <Route path="/recibos" element={<Recibos />} />
+                <Route path="/solicitacoes" element={<Solicitacoes />} />
+                <Route path="/agendamentos" element={<Agendamentos />} />
+                <Route path="/servicos" element={<Servicos />} />
+                <Route path="/perfil" element={<Perfil />} />
+                <Route path="/configuracoes" element={<Configuracoes />} />
+              </Route>
             </Route>
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </TooltipProvider>
+            <Route path="/admin" element={<AdminLogin />} />
+            <Route element={<AdminProtectedRoute />}>
+              <Route element={<AdminLayout />}>
+                <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                <Route
+                  path="/admin/solicitacoes"
+                  element={<AdminPlaceholder title="Solicitações" />}
+                />
+                <Route
+                  path="/admin/agendamentos"
+                  element={<AdminPlaceholder title="Agendamentos" />}
+                />
+                <Route
+                  path="/admin/informativos"
+                  element={<AdminPlaceholder title="Informativos" />}
+                />
+                <Route path="/admin/pop-ups" element={<AdminPlaceholder title="Pop-ups" />} />
+              </Route>
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </TooltipProvider>
+      </AdminAuthProvider>
     </AuthProvider>
   </BrowserRouter>
 )
