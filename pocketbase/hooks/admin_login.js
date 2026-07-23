@@ -1,22 +1,19 @@
 routerAdd('POST', '/backend/v1/admin/login', (e) => {
   const body = e.requestInfo().body || {}
-  const cpf = (body.cpf || '').trim()
+  const rawCpf = (body.cpf || '').trim()
   const senha = body.senha || ''
 
-  if (!cpf || !senha) {
+  if (!rawCpf || !senha) {
     return e.json(400, { error: 'CPF e senha são obrigatórios.' })
   }
+
+  const cpf = rawCpf.replace(/\D/g, '')
 
   let usuario
   try {
     usuario = $app.findFirstRecordByData('usuarios', 'cpf', cpf)
   } catch (_) {
     return e.json(401, { error: 'CPF ou senha inválidos.' })
-  }
-
-  const perfil = usuario.getString('perfil')
-  if (!perfil || perfil.trim() === '') {
-    return e.json(403, { error: 'Acesso negado. Seu perfil não possui permissão administrativa.' })
   }
 
   const storedSenha = usuario.getString('senha')
@@ -32,6 +29,11 @@ routerAdd('POST', '/backend/v1/admin/login', (e) => {
 
   if (!valid) {
     return e.json(401, { error: 'CPF ou senha inválidos.' })
+  }
+
+  const perfil = usuario.getString('perfil')
+  if (!perfil || perfil.trim() === '') {
+    return e.json(401, { error: 'Usuário não autorizado.' })
   }
 
   const jwtSecret = $secrets.get('PB_SUPERUSER_TOKEN') || 'portal-colaborador-secret'
