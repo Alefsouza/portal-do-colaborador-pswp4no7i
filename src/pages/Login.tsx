@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Navigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2, Bus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,24 +10,37 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { maskCpf, cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
+import { cn } from '@/lib/utils'
 
 export default function Login() {
-  const [cpf, setCpf] = useState('')
+  const { isAuthenticated, needsPasswordChange, login } = useAuth()
+  const navigate = useNavigate()
+  const [registro, setRegistro] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false)
 
-  const navigate = useNavigate()
+  if (isAuthenticated) {
+    return <Navigate to={needsPasswordChange ? '/alterar-senha' : '/dashboard'} replace />
+  }
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     setIsLoading(true)
-    setTimeout(() => {
-      setIsLoading(false)
+    const result = await login(registro, password)
+    setIsLoading(false)
+
+    if (result.error) {
+      setError(result.error)
+    } else if (result.user?.primeiro_acesso) {
+      navigate('/alterar-senha')
+    } else {
       navigate('/dashboard')
-    }, 500)
+    }
   }
 
   return (
@@ -53,16 +66,21 @@ export default function Login() {
             <p className="text-green-100/80">Via Sudeste</p>
           </div>
 
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-100 text-sm">
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-white">CPF</label>
+              <label className="text-sm font-medium text-white">Registro</label>
               <Input
                 required
-                value={cpf}
-                onChange={(e) => setCpf(maskCpf(e.target.value))}
-                placeholder="000.000.000-00"
+                value={registro}
+                onChange={(e) => setRegistro(e.target.value)}
+                placeholder="Digite seu registro"
                 className="bg-white/90 border-0 focus-visible:ring-primary h-12 text-slate-900"
-                maxLength={14}
               />
             </div>
 
