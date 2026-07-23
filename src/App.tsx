@@ -8,7 +8,7 @@ import Login from './pages/Login'
 import EsqueciSenha from './pages/EsqueciSenha'
 import Dashboard from './pages/Dashboard'
 import ChangePassword from './pages/ChangePassword'
-import Placeholder from './pages/Placeholder'
+import Telemetria from './pages/Telemetria'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -33,7 +33,7 @@ const App = () => (
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/telemetria" element={<Placeholder title="Telemetria" />} />
+              <Route path="/telemetria" element={<Telemetria />} />
               <Route path="/recibos" element={<Placeholder title="Recibos" />} />
               <Route path="/solicitacoes" element={<Placeholder title="Solicitações" />} />
               <Route path="/agendamentos" element={<Placeholder title="Agendamentos" />} />
