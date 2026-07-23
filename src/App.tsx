@@ -27,6 +27,7 @@ const App = () => (
         <Sonner />
         <Routes>
           <Route path="/" element={<Login />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/esqueci-senha" element={<EsqueciSenha />} />
           <Route path="/trocar-senha" element={<ChangePassword />} />
           <Route element={<ProtectedRoute />}>

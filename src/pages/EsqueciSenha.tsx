@@ -58,7 +58,7 @@ export default function EsqueciSenha() {
     setIsLoading(true)
     try {
       await redefinirSenha(cpf, nomeCompleto, novaSenha)
-      navigate('/login?reset=success')
+      navigate('/?reset=success')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao redefinir senha')
     }
