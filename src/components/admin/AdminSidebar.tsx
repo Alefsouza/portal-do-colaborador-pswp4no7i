@@ -8,6 +8,7 @@ import {
   Megaphone,
   Bell,
   LogOut,
+  Users,
 } from 'lucide-react'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
 import { useNavigate } from 'react-router-dom'
@@ -41,17 +42,20 @@ function NavItem({ to, label, icon: Icon, onNavigate }: NavItemProps) {
   )
 }
 
-const adminNav = [
-  { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-  { label: 'Solicitações', path: '/admin/solicitacoes', icon: ClipboardList },
-  { label: 'Agendamentos', path: '/admin/agendamentos', icon: CalendarClock },
-  { label: 'Informativos', path: '/admin/informativos', icon: Megaphone },
-  { label: 'Pop-ups', path: '/admin/popups', icon: Bell },
-]
-
 export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAdminAuth()
   const navigate = useNavigate()
+
+  const adminNav = [
+    { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+    { label: 'Solicitações', path: '/admin/solicitacoes', icon: ClipboardList },
+    { label: 'Agendamentos', path: '/admin/agendamentos', icon: CalendarClock },
+    { label: 'Informativos', path: '/admin/informativos', icon: Megaphone },
+    { label: 'Pop-ups', path: '/admin/popups', icon: Bell },
+    ...(user?.perfil === 'TI'
+      ? [{ label: 'Gerenciar Usuários', path: '/admin/usuarios', icon: Users }]
+      : []),
+  ]
 
   const handleLogout = () => {
     logout()

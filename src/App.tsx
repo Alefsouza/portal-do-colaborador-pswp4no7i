@@ -26,6 +26,7 @@ import AdminSolicitacoes from './pages/admin/AdminSolicitacoes'
 import AdminAgendamentos from './pages/admin/AdminAgendamentos'
 import AdminInformativos from './pages/admin/AdminInformativos'
 import AdminPopups from './pages/admin/AdminPopups'
+import AdminUsuarios from './pages/admin/AdminUsuarios'
 
 function ProtectedRoute() {
   const { isAuthenticated, needsPasswordChange } = useAuth()
@@ -72,6 +73,7 @@ const App = () => (
                 <Route path="/admin/agendamentos" element={<AdminAgendamentos />} />
                 <Route path="/admin/informativos" element={<AdminInformativos />} />
                 <Route path="/admin/popups" element={<AdminPopups />} />
+                <Route path="/admin/usuarios" element={<AdminUsuarios />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />

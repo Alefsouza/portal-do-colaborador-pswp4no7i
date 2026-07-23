@@ -25,6 +25,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
 import {
   listAdminSolicitacoes,
+  listAllAdminSolicitacoes,
   updateSolicitacaoStatus,
   type AdminSolicitacao,
 } from '@/services/admin-solicitacoes'
@@ -49,17 +50,22 @@ export default function AdminSolicitacoes() {
   const [error, setError] = useState(false)
 
   const loadData = useCallback(async () => {
-    if (!user?.departamento) return
+    if (!user) return
+    if (user.perfil !== 'TI' && !user.departamento) return
     setLoading(true)
     try {
       setError(false)
-      setItems(await listAdminSolicitacoes(user.departamento))
+      const items =
+        user.perfil === 'TI'
+          ? await listAllAdminSolicitacoes()
+          : await listAdminSolicitacoes(user.departamento)
+      setItems(items)
     } catch {
       setError(true)
     } finally {
       setLoading(false)
     }
-  }, [user?.departamento])
+  }, [user?.departamento, user?.perfil])
 
   useEffect(() => {
     loadData()
@@ -110,7 +116,11 @@ export default function AdminSolicitacoes() {
     <div className="space-y-6 animate-fade-in-up">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Solicitações</h1>
-        <p className="text-slate-500 mt-1">Gerencie as solicitações do departamento</p>
+        <p className="text-slate-500 mt-1">
+          {user?.perfil === 'TI'
+            ? 'Gerencie as solicitações de todos os departamentos'
+            : 'Gerencie as solicitações do departamento'}
+        </p>
       </div>
       <Card className="border-slate-200 hidden md:block">
         <CardContent className="p-0">

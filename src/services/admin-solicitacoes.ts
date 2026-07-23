@@ -25,6 +25,13 @@ export async function listAdminSolicitacoes(departamento: string): Promise<Admin
   })) as AdminSolicitacao[]
 }
 
+export async function listAllAdminSolicitacoes(): Promise<AdminSolicitacao[]> {
+  return (await pb.collection('solicitacoes').getFullList({
+    sort: '-created',
+    expand: 'id_usuario',
+  })) as AdminSolicitacao[]
+}
+
 export async function updateSolicitacaoStatus(id: string, status: string): Promise<void> {
   await pb.collection('solicitacoes').update(id, { status })
 }
