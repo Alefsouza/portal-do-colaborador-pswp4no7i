@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-23T15:04:01.393Z",
+  "generatedAt": "2026-07-23T15:11:04.029Z",
   "collections": [
     {
       "name": "users",
@@ -331,13 +331,6 @@
       },
       "fields": [
         {
-          "name": "id_informativo",
-          "type": "relation",
-          "required": false,
-          "system": false,
-          "collectionRef": "informativos"
-        },
-        {
           "name": "id_usuario",
           "type": "relation",
           "required": false,
@@ -363,10 +356,22 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "conteudo",
+          "type": "text",
+          "required": true,
+          "system": false
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_popup_envios_usuario_informativo ON popup_envios (id_usuario, id_informativo)"
+        "CREATE INDEX `idx_popup_envios_usuario_created` ON `popup_envios` (id_usuario, created)"
       ]
     }
   ]

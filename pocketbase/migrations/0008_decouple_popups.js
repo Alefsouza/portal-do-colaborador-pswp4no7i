@@ -2,9 +2,8 @@ migrate(
   (app) => {
     const col = app.findCollectionByNameOrId('popup_envios')
 
-    const idInformativoField = col.fields.getByName('id_informativo')
-    if (idInformativoField) {
-      col.fields.remove(idInformativoField)
+    if (col.fields.getByName('id_informativo')) {
+      col.fields.removeByName('id_informativo')
     }
 
     if (!col.fields.getByName('titulo')) {
@@ -35,10 +34,8 @@ migrate(
       )
     }
 
-    const tituloField = col.fields.getByName('titulo')
-    if (tituloField) col.fields.remove(tituloField)
-    const conteudoField = col.fields.getByName('conteudo')
-    if (conteudoField) col.fields.remove(conteudoField)
+    if (col.fields.getByName('titulo')) col.fields.removeByName('titulo')
+    if (col.fields.getByName('conteudo')) col.fields.removeByName('conteudo')
 
     col.addIndex('idx_popup_envios_usuario_informativo', false, 'id_usuario, id_informativo', '')
     col.removeIndex('idx_popup_envios_usuario_created')

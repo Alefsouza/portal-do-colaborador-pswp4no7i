@@ -28,9 +28,8 @@ migrate(
       conteudoField.required = true
     }
 
-    const anexoField = col.fields.getByName('anexo')
-    if (anexoField) {
-      col.fields.remove(anexoField)
+    if (col.fields.getByName('anexo')) {
+      col.fields.removeByName('anexo')
     }
 
     app.save(col)
