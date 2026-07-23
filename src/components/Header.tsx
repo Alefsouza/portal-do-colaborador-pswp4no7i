@@ -1,4 +1,4 @@
-import { Menu, Bell, Bus, LogOut, ChevronDown } from 'lucide-react'
+import { Menu, Bell, Bus, LogOut, ChevronDown, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ function getInitials(name: string) {
 }
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { user, logout } = useAuth()
+  const { user, logout, hasAdminAccess } = useAuth()
   const navigate = useNavigate()
   const nome = user?.nome_completo || 'Colaborador'
 
@@ -47,6 +47,17 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
 
       <div className="flex items-center gap-3">
+        {hasAdminAccess && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/admin/dashboard')}
+            className="hidden sm:flex cursor-pointer hover:bg-primary/5 hover:border-primary/40 transition-all duration-200"
+          >
+            <ShieldCheck className="w-4 h-4 mr-2" />
+            Administrativo
+          </Button>
+        )}
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="w-5 h-5 text-slate-600" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
@@ -70,6 +81,15 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>{nome}</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {hasAdminAccess && (
+              <DropdownMenuItem
+                onClick={() => navigate('/admin/dashboard')}
+                className="cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 mr-2" />
+                Ir para Administrativo
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
               <LogOut className="w-4 h-4 mr-2" />
               Sair

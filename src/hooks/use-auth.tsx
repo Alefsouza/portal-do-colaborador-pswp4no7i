@@ -4,6 +4,7 @@ import {
   changePassword as changePasswordApi,
   type AuthUser,
 } from '@/services/auth'
+import { isAdminProfile } from '@/lib/admin-profiles'
 
 const TOKEN_KEY = 'portal_token'
 const USER_KEY = 'portal_user'
@@ -17,6 +18,8 @@ interface AuthContextType {
   changePassword: (novaSenha: string) => Promise<{ error: string | null }>
   logout: () => void
   updateUser: (updates: Partial<AuthUser>) => void
+  setSession: (token: string, user: AuthUser) => void
+  hasAdminAccess: boolean
   loading: boolean
 }
 
@@ -70,6 +73,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
+  const setSession = (newToken: string, newUser: AuthUser) => {
+    localStorage.setItem(TOKEN_KEY, newToken)
+    localStorage.setItem(USER_KEY, JSON.stringify(newUser))
+    localStorage.setItem('loginTimestamp', new Date().toISOString())
+    setToken(newToken)
+    setUser(newUser)
+  }
+
   const updateUser = (updates: Partial<AuthUser>) => {
     const updatedUser = user ? { ...user, ...updates } : null
     if (updatedUser) {
@@ -86,6 +97,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null)
   }
 
+  const hasAdminAccess = !!localStorage.getItem('admin_token') || isAdminProfile(user?.perfil)
+
   return (
     <AuthContext.Provider
       value={{
@@ -97,6 +110,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         changePassword,
         logout,
         updateUser,
+        setSession,
+        hasAdminAccess,
         loading: false,
       }}
     >
