@@ -15,7 +15,7 @@ export interface Agendamento {
 export async function listAgendamentos(userId: string): Promise<Agendamento[]> {
   return (await pb.collection('agendamentos').getFullList({
     filter: `id_usuario = "${userId}"`,
-    sort: '-data',
+    sort: '-created',
   })) as Agendamento[]
 }
 
@@ -28,6 +28,6 @@ export async function createAgendamento(data: {
 }): Promise<Agendamento> {
   return (await pb.collection('agendamentos').create({
     ...data,
-    status: 'Agendado',
+    status: 'Pendente',
   })) as Agendamento
 }

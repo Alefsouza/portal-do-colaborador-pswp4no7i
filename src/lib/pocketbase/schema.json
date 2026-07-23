@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-23T13:51:21.457Z",
+  "generatedAt": "2026-07-23T13:57:52.167Z",
   "collections": [
     {
       "name": "users",
@@ -288,13 +288,6 @@
           "system": false
         },
         {
-          "name": "status",
-          "type": "select",
-          "required": true,
-          "system": false,
-          "selectValues": ["Agendado", "Confirmado", "Cancelado", "Realizado"]
-        },
-        {
           "name": "created",
           "type": "autodate",
           "required": false,
@@ -307,6 +300,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["Pendente", "Confirmado", "Cancelado", "Realizado"]
         }
       ],
       "indexes": [
