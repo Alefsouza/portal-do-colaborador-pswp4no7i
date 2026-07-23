@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { maskCpf, cn } from '@/lib/utils'
 
-export default function Index() {
+export default function Login() {
   const [cpf, setCpf] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -32,7 +32,6 @@ export default function Index() {
 
   return (
     <div className="min-h-screen flex relative overflow-hidden bg-gradient-to-br from-[#0f5132] to-[#06422b]">
-      {/* Background SVG pattern */}
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
           <defs>
@@ -112,7 +111,6 @@ export default function Index() {
         </div>
       </div>
 
-      {/* Right side illustration (Desktop) */}
       <div className="hidden lg:flex flex-1 items-center justify-center p-12 z-10">
         <div className="w-full max-w-lg aspect-square relative opacity-90">
           <svg

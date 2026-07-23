@@ -1,14 +1,13 @@
-/* Main App Component - Handles routing (using react-router-dom), query client and other providers - use this file to add all routes */
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import Index from './pages/Index'
+
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import Placeholder from './pages/Placeholder'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
-
-// ONLY IMPORT AND RENDER WORKING PAGES, NEVER ADD PLACEHOLDER COMPONENTS OR PAGES IN THIS FILE
-// AVOID REMOVING ANY CONTEXT PROVIDERS FROM THIS FILE (e.g. TooltipProvider, Toaster, Sonner)
 
 const App = () => (
   <BrowserRouter>
@@ -16,10 +15,19 @@ const App = () => (
       <Toaster />
       <Sonner />
       <Routes>
+        {/* Public Route */}
+        <Route path="/" element={<Login />} />
+
+        {/* Authenticated Routes wrapped in Layout */}
         <Route element={<Layout />}>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES MUST BE ADDED HERE */}
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/telemetria" element={<Placeholder title="Telemetria" />} />
+          <Route path="/recibos" element={<Placeholder title="Recibos" />} />
+          <Route path="/solicitacoes" element={<Placeholder title="Solicitações" />} />
+          <Route path="/agendamentos" element={<Placeholder title="Agendamentos" />} />
+          <Route path="/servicos" element={<Placeholder title="Serviços" />} />
         </Route>
+
         <Route path="*" element={<NotFound />} />
       </Routes>
     </TooltipProvider>
