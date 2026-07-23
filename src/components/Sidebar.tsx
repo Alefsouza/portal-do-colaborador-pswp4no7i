@@ -70,12 +70,12 @@ function LogoutItem({ onNavigate }: LogoutItemProps) {
 }
 
 const mainNav = [
-  { label: 'Início', path: '/dashboard', icon: Home },
-  { label: 'Telemetria', path: '/telemetria', icon: Gauge },
-  { label: 'Recibos', path: '/recibos', icon: Receipt },
-  { label: 'Solicitações', path: '/solicitacoes', icon: ClipboardList },
-  { label: 'Agendamentos', path: '/agendamentos', icon: CalendarClock },
-  { label: 'Serviços', path: '/servicos', icon: Wrench },
+  { label: 'Início', to: '/dashboard', icon: Home },
+  { label: 'Telemetria', to: '/telemetria', icon: Gauge },
+  { label: 'Recibos', to: '/recibos', icon: Receipt },
+  { label: 'Solicitações', to: '/solicitacoes', icon: ClipboardList },
+  { label: 'Agendamentos', to: '/agendamentos', icon: CalendarClock },
+  { label: 'Serviços', to: '/servicos', icon: Wrench },
 ]
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
