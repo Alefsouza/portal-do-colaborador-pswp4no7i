@@ -1,15 +1,8 @@
 import { useState } from 'react'
-import { useNavigate, Navigate } from 'react-router-dom'
-import { Eye, EyeOff, Loader2, Bus } from 'lucide-react'
+import { useNavigate, Navigate, Link, useSearchParams } from 'react-router-dom'
+import { Eye, EyeOff, Loader2, Bus, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
 import { useAuth } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
 
@@ -21,7 +14,8 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false)
+  const [searchParams] = useSearchParams()
+  const resetSuccess = searchParams.get('reset') === 'success'
 
   if (isAuthenticated) {
     return <Navigate to={needsPasswordChange ? '/trocar-senha' : '/dashboard'} replace />
@@ -65,6 +59,13 @@ export default function Login() {
             <h1 className="text-2xl font-bold text-white mb-2">Portal do Colaborador</h1>
             <p className="text-green-100/80">Via Sudeste</p>
           </div>
+
+          {resetSuccess && (
+            <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-100 text-sm flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 flex-shrink-0" />
+              Senha alterada com sucesso! Faça login com sua nova senha.
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-100 text-sm">
@@ -118,13 +119,12 @@ export default function Login() {
           </form>
 
           <div className="mt-6 text-center">
-            <button
-              type="button"
-              onClick={() => setIsForgotModalOpen(true)}
+            <Link
+              to="/esqueci-senha"
               className="text-sm text-green-100 hover:text-white hover:underline transition-colors"
             >
               Esqueci a senha
-            </button>
+            </Link>
           </div>
         </div>
       </div>
@@ -147,20 +147,6 @@ export default function Login() {
           </div>
         </div>
       </div>
-
-      <Dialog open={isForgotModalOpen} onOpenChange={setIsForgotModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Recuperação de Senha</DialogTitle>
-            <DialogDescription className="pt-4">
-              Instruções de redefinição foram enviadas para o e-mail cadastrado.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end mt-4">
-            <Button onClick={() => setIsForgotModalOpen(false)}>Fechar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

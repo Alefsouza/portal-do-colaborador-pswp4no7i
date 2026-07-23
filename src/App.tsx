@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 
 import Login from './pages/Login'
+import EsqueciSenha from './pages/EsqueciSenha'
 import Dashboard from './pages/Dashboard'
 import ChangePassword from './pages/ChangePassword'
 import Placeholder from './pages/Placeholder'
@@ -26,6 +27,7 @@ const App = () => (
         <Sonner />
         <Routes>
           <Route path="/" element={<Login />} />
+          <Route path="/esqueci-senha" element={<EsqueciSenha />} />
           <Route path="/trocar-senha" element={<ChangePassword />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
