@@ -9,10 +9,8 @@ import {
   Bell,
   LogOut,
   Users,
-  UserRound,
 } from 'lucide-react'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
-import { useAuth } from '@/hooks/use-auth'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 
@@ -45,8 +43,7 @@ function NavItem({ to, label, icon: Icon, onNavigate }: NavItemProps) {
 }
 
 export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const { user, token, logout } = useAdminAuth()
-  const { setSession } = useAuth()
+  const { logout } = useAdminAuth()
   const navigate = useNavigate()
 
   const adminNav = [
@@ -63,18 +60,6 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const handleLogout = () => {
     logout()
     navigate('/admin')
-  }
-
-  const handleSwitchToPortal = () => {
-    if (!token || !user) return
-    setSession(token, {
-      id: user.id,
-      nome_completo: user.nome_completo,
-      primeiro_acesso: false,
-      departamento: user.departamento,
-      perfil: user.perfil,
-    })
-    navigate('/dashboard')
   }
 
   return (
@@ -98,20 +83,7 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
         ))}
       </nav>
 
-      <div className="px-3 py-4 border-t border-white/10 space-y-3">
-        <div className="px-3 py-2">
-          <p className="text-white text-sm font-semibold truncate">
-            {user?.nome_completo || 'Administrador'}
-          </p>
-          <p className="text-green-100/70 text-xs mt-0.5">{user?.perfil || ''}</p>
-        </div>
-        <button
-          onClick={handleSwitchToPortal}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-green-100/80 hover:bg-white/10 hover:text-white transition-all duration-200 w-full"
-        >
-          <UserRound className="w-5 h-5 shrink-0" />
-          Ver como Colaborador
-        </button>
+      <div className="px-3 py-4 border-t border-white/10">
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-200/80 hover:bg-red-500/20 hover:text-red-100 transition-all duration-200 w-full"
