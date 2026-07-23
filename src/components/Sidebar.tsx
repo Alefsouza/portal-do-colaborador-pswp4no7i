@@ -1,7 +1,17 @@
-import { useLocation, Link } from 'react-router-dom'
+import { useLocation, Link, useNavigate } from 'react-router-dom'
 import type { ElementType } from 'react'
-import { Bus, Home, Gauge, Receipt, ClipboardList, CalendarClock, Wrench, User } from 'lucide-react'
+import {
+  Bus,
+  Home,
+  Gauge,
+  Receipt,
+  ClipboardList,
+  CalendarClock,
+  Wrench,
+  LogOut,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
 
 interface NavItemProps {
   to: string
@@ -31,6 +41,34 @@ function NavItem({ to, label, icon: Icon, onNavigate }: NavItemProps) {
   )
 }
 
+interface LogoutItemProps {
+  onNavigate?: () => void
+}
+
+function LogoutItem({ onNavigate }: LogoutItemProps) {
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    onNavigate?.()
+    logout()
+    navigate('/')
+  }
+
+  return (
+    <button
+      onClick={handleLogout}
+      className={cn(
+        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 w-full',
+        'text-green-100/80 hover:bg-white/10 hover:text-white',
+      )}
+    >
+      <LogOut className="w-5 h-5 shrink-0" />
+      Sair
+    </button>
+  )
+}
+
 const mainNav = [
   { label: 'Início', path: '/dashboard', icon: Home },
   { label: 'Telemetria', path: '/telemetria', icon: Gauge },
@@ -39,8 +77,6 @@ const mainNav = [
   { label: 'Agendamentos', path: '/agendamentos', icon: CalendarClock },
   { label: 'Serviços', path: '/servicos', icon: Wrench },
 ]
-
-const bottomNav = [{ label: 'Perfil', path: '/perfil', icon: User }]
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
@@ -65,9 +101,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="px-3 py-4 border-t border-white/10 space-y-1">
-        {bottomNav.map((item) => (
-          <NavItem key={item.label} {...item} onNavigate={onNavigate} />
-        ))}
+        <LogoutItem onNavigate={onNavigate} />
       </div>
     </div>
   )
