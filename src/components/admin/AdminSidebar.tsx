@@ -47,13 +47,13 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const navigate = useNavigate()
 
   const adminNav = [
-    { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { label: 'Solicitações', path: '/admin/solicitacoes', icon: ClipboardList },
-    { label: 'Agendamentos', path: '/admin/agendamentos', icon: CalendarClock },
-    { label: 'Informativos', path: '/admin/informativos', icon: Megaphone },
-    { label: 'Pop-ups', path: '/admin/popups', icon: Bell },
+    { label: 'Dashboard', to: '/admin/dashboard', icon: LayoutDashboard },
+    { label: 'Solicitações', to: '/admin/solicitacoes', icon: ClipboardList },
+    { label: 'Agendamentos', to: '/admin/agendamentos', icon: CalendarClock },
+    { label: 'Informativos', to: '/admin/informativos', icon: Megaphone },
+    { label: 'Pop-ups', to: '/admin/popups', icon: Bell },
     ...(user?.perfil === 'TI'
-      ? [{ label: 'Gerenciar Usuários', path: '/admin/usuarios', icon: Users }]
+      ? [{ label: 'Gerenciar Usuários', to: '/admin/usuarios', icon: Users }]
       : []),
   ]
 
