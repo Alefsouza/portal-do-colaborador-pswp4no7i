@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { ClipboardList, CalendarClock, Megaphone, Bell, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
@@ -18,20 +19,29 @@ const cards = [
     label: 'Solicitações',
     icon: 'ClipboardList',
     key: 'solicitacoes' as const,
+    to: '/admin/solicitacoes',
   },
   {
     id: 'agendamentos',
     label: 'Agendamentos',
     icon: 'CalendarClock',
     key: 'agendamentos' as const,
+    to: '/admin/agendamentos',
   },
   {
     id: 'informativos',
     label: 'Informativos Ativos',
     icon: 'Megaphone',
     key: 'informativos' as const,
+    to: '/admin/informativos',
   },
-  { id: 'popups', label: 'Pop-ups Enviados', icon: 'Bell', key: 'popupEnvios' as const },
+  {
+    id: 'popups',
+    label: 'Pop-ups Enviados',
+    icon: 'Bell',
+    key: 'popupEnvios' as const,
+    to: '/admin/popups',
+  },
 ]
 
 export default function AdminDashboard() {
@@ -60,24 +70,23 @@ export default function AdminDashboard() {
         {cards.map((card) => {
           const Icon = iconMap[card.icon] || ClipboardList
           return (
-            <Card
-              key={card.id}
-              className="border-slate-200 hover:border-primary/40 hover:shadow-elevation transition-all duration-300 hover:-translate-y-1"
-            >
-              <CardContent className="p-6">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                  <Icon className="w-6 h-6 text-primary" />
-                </div>
-                <p className="text-sm text-slate-500 font-medium mb-1">{card.label}</p>
-                <p className="text-3xl font-bold text-slate-900">
-                  {loading ? (
-                    <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-                  ) : (
-                    (counts?.[card.key] ?? 0)
-                  )}
-                </p>
-              </CardContent>
-            </Card>
+            <Link key={card.id} to={card.to} className="block group cursor-pointer">
+              <Card className="border-slate-200 hover:border-primary/40 hover:shadow-elevation transition-all duration-300 hover:-translate-y-1 group-hover:bg-primary/[0.02]">
+                <CardContent className="p-6">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors duration-300">
+                    <Icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <p className="text-sm text-slate-500 font-medium mb-1">{card.label}</p>
+                  <p className="text-3xl font-bold text-slate-900">
+                    {loading ? (
+                      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                    ) : (
+                      (counts?.[card.key] ?? 0)
+                    )}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
           )
         })}
       </div>
