@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -8,10 +9,12 @@ import {
   Wrench,
   ArrowRight,
   Megaphone,
-  Clock,
-  GraduationCap,
+  Download,
 } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { Card, CardContent } from '@/components/ui/card'
+import { listInformativos, getAnexoUrl, type Informativo } from '@/services/admin-informativos'
 
 const cards = [
   {
@@ -46,29 +49,16 @@ const cards = [
   },
 ]
 
-const notices = [
-  {
-    title: 'Nova frota de ônibus elétricos',
-    date: '15 Jul 2026',
-    desc: 'A Via Sudeste inaugura 10 novos ônibus elétricos, reforçando nosso compromisso com a sustentabilidade.',
-    icon: Megaphone,
-  },
-  {
-    title: 'Horário de verão',
-    date: '10 Jul 2026',
-    desc: 'A partir de 01/10, os horários das linhas serão ajustados. Confira as mudanças no mural interno.',
-    icon: Clock,
-  },
-  {
-    title: 'Programa de treinamento 2026',
-    date: '05 Jul 2026',
-    desc: 'Inscrições abertas para o programa de capacitação profissional. Vagas limitadas por área.',
-    icon: GraduationCap,
-  },
-]
-
 export default function Dashboard() {
   const { user } = useAuth()
+  const [notices, setNotices] = useState<Informativo[]>([])
+
+  useEffect(() => {
+    listInformativos()
+      .then((data) => setNotices(data.filter((n) => n.status_ativo)))
+      .catch(() => {})
+  }, [])
+
   return (
     <div className="space-y-8 animate-fade-in-up">
       <div>
@@ -100,25 +90,48 @@ export default function Dashboard() {
       <div>
         <h2 className="text-xl font-bold text-slate-900 mb-4">Informativos da Empresa</h2>
         <div className="space-y-3">
-          {notices.map((notice) => (
-            <Card
-              key={notice.title}
-              className="border-slate-200 hover:shadow-subtle transition-shadow"
-            >
-              <CardContent className="p-4 flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <notice.icon className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <h4 className="font-semibold text-slate-900">{notice.title}</h4>
-                    <span className="text-xs text-slate-400 shrink-0">{notice.date}</span>
-                  </div>
-                  <p className="text-sm text-slate-500 leading-relaxed">{notice.desc}</p>
-                </div>
+          {notices.length === 0 ? (
+            <Card className="border-slate-200">
+              <CardContent className="p-6 text-center text-slate-400">
+                Nenhum informativo disponível no momento.
               </CardContent>
             </Card>
-          ))}
+          ) : (
+            notices.map((notice) => (
+              <Card
+                key={notice.id}
+                className="border-slate-200 hover:shadow-subtle transition-shadow"
+              >
+                <CardContent className="p-4 flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Megaphone className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <h4 className="font-semibold text-slate-900">{notice.titulo}</h4>
+                      <span className="text-xs text-slate-400 shrink-0">
+                        {format(parseISO(notice.created), 'dd MMM yyyy', { locale: ptBR })}
+                      </span>
+                    </div>
+                    {notice.conteudo && (
+                      <p className="text-sm text-slate-500 leading-relaxed">{notice.conteudo}</p>
+                    )}
+                    {notice.anexo && (
+                      <a
+                        href={getAnexoUrl(notice)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-primary text-sm font-medium mt-2 hover:underline"
+                      >
+                        <Download className="w-4 h-4" />
+                        Baixar anexo
+                      </a>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       </div>
     </div>

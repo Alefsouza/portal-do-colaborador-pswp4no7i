@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, AlertCircle, Megaphone, Plus, Pencil, Trash2 } from 'lucide-react'
+import {
+  Loader2,
+  AlertCircle,
+  Megaphone,
+  Plus,
+  Pencil,
+  Trash2,
+  Download,
+  FileText,
+} from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -29,6 +38,8 @@ import { useRealtime } from '@/hooks/use-realtime'
 import {
   listInformativos,
   deleteInformativo,
+  getAnexoUrl,
+  isImageFile,
   type Informativo,
 } from '@/services/admin-informativos'
 import { InformativoFormDialog } from '@/components/admin/InformativoFormDialog'
@@ -128,6 +139,7 @@ export default function AdminInformativos() {
                   <TableHead className="font-bold text-primary">Departamento</TableHead>
                   <TableHead className="font-bold text-primary">Status</TableHead>
                   <TableHead className="font-bold text-primary">Data</TableHead>
+                  <TableHead className="font-bold text-primary">Anexo</TableHead>
                   <TableHead className="font-bold text-primary">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -153,6 +165,31 @@ export default function AdminInformativos() {
                     </TableCell>
                     <TableCell className="text-slate-600 whitespace-nowrap">
                       {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
+                    </TableCell>
+                    <TableCell>
+                      {item.anexo ? (
+                        <a
+                          href={getAnexoUrl(item)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                        >
+                          {isImageFile(item.anexo) ? (
+                            <img
+                              src={getAnexoUrl(item)}
+                              alt={item.titulo}
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                          ) : (
+                            <>
+                              <Download className="w-4 h-4" />
+                              Anexo
+                            </>
+                          )}
+                        </a>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -193,6 +230,17 @@ export default function AdminInformativos() {
                 {item.departamento || 'Todos'} •{' '}
                 {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
               </p>
+              {item.anexo && (
+                <a
+                  href={getAnexoUrl(item)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary text-sm hover:underline"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Baixar anexo
+                </a>
+              )}
               <div className="flex gap-2 pt-1">
                 <Button
                   size="sm"

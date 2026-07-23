@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-23T14:35:32.689Z",
+  "generatedAt": "2026-07-23T14:51:24.426Z",
   "collections": [
     {
       "name": "users",
@@ -144,7 +144,7 @@
         {
           "name": "conteudo",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -172,6 +172,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "anexo",
+          "type": "file",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": ["CREATE INDEX idx_informativos_status_ativo ON informativos (status_ativo)"]
