@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Loader2, Receipt, FileText, AlertCircle, Building2 } from 'lucide-react'
+import { Loader2, Receipt, FileText, AlertCircle, Building2, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -167,72 +167,83 @@ export default function Recibos() {
       )}
 
       {documento && !loading && !error && (
-        <Card className="border-slate-200 shadow-lg overflow-hidden">
-          <CardContent className="p-0">
-            <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <Building2 className="w-8 h-8" />
+        <div id="printable-document" className="space-y-4">
+          <div className="flex justify-end print:hidden">
+            <Button
+              onClick={() => window.print()}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <Printer className="w-4 h-4 mr-2" />
+              Imprimir / Download
+            </Button>
+          </div>
+          <Card className="border-slate-200 shadow-lg overflow-hidden">
+            <CardContent className="p-0">
+              <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <Building2 className="w-8 h-8" />
+                    <div>
+                      <p className="text-lg font-bold">Via Sudeste Transportes</p>
+                      <p className="text-green-100 text-sm">{documento.tipo}</p>
+                    </div>
+                  </div>
+                  <FileText className="w-10 h-10 text-green-200" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                   <div>
-                    <p className="text-lg font-bold">Via Sudeste Transportes</p>
-                    <p className="text-green-100 text-sm">{documento.tipo}</p>
+                    <p className="text-green-200 text-xs">Colaborador</p>
+                    <p className="font-semibold">{documento.colaborador.nome}</p>
+                  </div>
+                  <div>
+                    <p className="text-green-200 text-xs">CPF</p>
+                    <p className="font-semibold">{documento.colaborador.cpf}</p>
+                  </div>
+                  <div>
+                    <p className="text-green-200 text-xs">Departamento</p>
+                    <p className="font-semibold">{documento.colaborador.departamento}</p>
+                  </div>
+                  <div>
+                    <p className="text-green-200 text-xs">Período</p>
+                    <p className="font-semibold">
+                      {MESES[documento.mes - 1]} / {documento.ano}
+                    </p>
                   </div>
                 </div>
-                <FileText className="w-10 h-10 text-green-200" />
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                <div>
-                  <p className="text-green-200 text-xs">Colaborador</p>
-                  <p className="font-semibold">{documento.colaborador.nome}</p>
-                </div>
-                <div>
-                  <p className="text-green-200 text-xs">CPF</p>
-                  <p className="font-semibold">{documento.colaborador.cpf}</p>
-                </div>
-                <div>
-                  <p className="text-green-200 text-xs">Departamento</p>
-                  <p className="font-semibold">{documento.colaborador.departamento}</p>
-                </div>
-                <div>
-                  <p className="text-green-200 text-xs">Período</p>
-                  <p className="font-semibold">
-                    {MESES[documento.mes - 1]} / {documento.ano}
-                  </p>
-                </div>
-              </div>
-            </div>
 
-            <div className="p-6 space-y-5">
-              {documento.secoes.map((secao, i) => (
-                <div key={i}>
-                  <h3 className="text-sm font-bold text-green-700 border-b border-green-100 pb-1.5 mb-3">
-                    {secao.titulo}
-                  </h3>
-                  <div className="space-y-2">
-                    {secao.itens.map((item, j) => (
-                      <div key={j} className="flex justify-between items-center text-sm">
-                        <span className="text-slate-600">{item.label}</span>
-                        <span className="font-medium text-slate-900">{item.valor}</span>
-                      </div>
-                    ))}
+              <div className="p-6 space-y-5">
+                {documento.secoes.map((secao, i) => (
+                  <div key={i}>
+                    <h3 className="text-sm font-bold text-green-700 border-b border-green-100 pb-1.5 mb-3">
+                      {secao.titulo}
+                    </h3>
+                    <div className="space-y-2">
+                      {secao.itens.map((item, j) => (
+                        <div key={j} className="flex justify-between items-center text-sm">
+                          <span className="text-slate-600">{item.label}</span>
+                          <span className="font-medium text-slate-900">{item.valor}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-              {documento.totalLabel && documento.totalValor && (
-                <div className="flex justify-between items-center pt-3 border-t-2 border-green-600">
-                  <span className="font-bold text-green-700">{documento.totalLabel}</span>
-                  <span className="font-bold text-lg text-green-700">{documento.totalValor}</span>
-                </div>
-              )}
-            </div>
+                ))}
+                {documento.totalLabel && documento.totalValor && (
+                  <div className="flex justify-between items-center pt-3 border-t-2 border-green-600">
+                    <span className="font-bold text-green-700">{documento.totalLabel}</span>
+                    <span className="font-bold text-lg text-green-700">{documento.totalValor}</span>
+                  </div>
+                )}
+              </div>
 
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
-              <p className="text-xs text-slate-400">
-                Documento gerado em {documento.dataEmissao} • Via Sudeste Portal do Colaborador
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
+                <p className="text-xs text-slate-400">
+                  Documento gerado em {documento.dataEmissao} • Via Sudeste Portal do Colaborador
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   )

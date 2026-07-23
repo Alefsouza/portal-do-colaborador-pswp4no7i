@@ -239,6 +239,11 @@ export async function getDocumento(
   ano: number,
   colaboradorId: string,
 ): Promise<DocumentoData> {
+  // TODO: Replace mock with real PocketBase call once the backend views are ready.
+  // Example:
+  //   return await pb.collection('recibos').getFirstListItem(
+  //     `tipo = "${tipo}" && mes = ${mes} && ano = ${ano} && id_usuario = "${colaboradorId}"`,
+  //   )
   await new Promise((r) => setTimeout(r, 800))
   const { secoes, totalLabel, totalValor } = buildSecoes(tipo, mes, ano)
   return {
