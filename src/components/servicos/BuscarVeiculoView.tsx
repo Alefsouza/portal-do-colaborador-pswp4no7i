@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { fetchVehiclePosition, type VehiclePosition } from '@/lib/olho-vivo'
+import { formatBrazilianDateTime } from '@/lib/utils'
 
 interface BuscarVeiculoViewProps {
   onBack: () => void
@@ -206,7 +207,11 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
                   label="Sentido"
                   value={position.sentido === 1 ? 'Ida' : position.sentido === 2 ? 'Volta' : '—'}
                 />
-                <DetailItem icon={Clock} label="Horário da localização" value={position.horario} />
+                <DetailItem
+                  icon={Clock}
+                  label="Horário da localização"
+                  value={formatBrazilianDateTime(position.horario)}
+                />
                 <DetailItem
                   icon={Accessibility}
                   label="Acessível"
