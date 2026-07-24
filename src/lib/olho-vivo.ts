@@ -16,7 +16,10 @@ export async function fetchVehiclePosition(prefixo: string): Promise<VehiclePosi
     const res = await pb.send('/backend/v1/olho-vivo/buscar-veiculo', {
       method: 'POST',
       body: JSON.stringify({ prefixo }),
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(pb.authStore.token ? { Authorization: pb.authStore.token } : {}),
+      },
     })
     return res as VehiclePosition
   } catch (err) {
