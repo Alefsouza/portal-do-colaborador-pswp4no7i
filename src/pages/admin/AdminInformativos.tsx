@@ -43,8 +43,11 @@ import {
   type Informativo,
 } from '@/services/admin-informativos'
 import { InformativoFormDialog } from '@/components/admin/InformativoFormDialog'
+import { useAdminAuth } from '@/hooks/use-admin-auth'
 
 export default function AdminInformativos() {
+  const { user } = useAdminAuth()
+  const canManage = user?.perfil === 'TI'
   const [items, setItems] = useState<Informativo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -116,10 +119,12 @@ export default function AdminInformativos() {
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Informativos</h1>
           <p className="text-slate-500 mt-1">Gerencie noticias e comunicados</p>
         </div>
-        <Button onClick={openCreate} className="bg-primary hover:bg-primary/90 text-white gap-2">
-          <Plus className="w-4 h-4" />
-          Criar Informativo
-        </Button>
+        {canManage && (
+          <Button onClick={openCreate} className="bg-primary hover:bg-primary/90 text-white gap-2">
+            <Plus className="w-4 h-4" />
+            Criar Informativo
+          </Button>
+        )}
       </div>
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -140,7 +145,7 @@ export default function AdminInformativos() {
                   <TableHead className="font-bold text-primary">Status</TableHead>
                   <TableHead className="font-bold text-primary">Data</TableHead>
                   <TableHead className="font-bold text-primary">Anexo</TableHead>
-                  <TableHead className="font-bold text-primary">Ações</TableHead>
+                  {canManage && <TableHead className="font-bold text-primary">Ações</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -191,16 +196,18 @@ export default function AdminInformativos() {
                         <span className="text-slate-300">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button size="icon" variant="ghost" onClick={() => openEdit(item)}>
-                          <Pencil className="w-4 h-4 text-slate-600" />
-                        </Button>
-                        <Button size="icon" variant="ghost" onClick={() => setDeleteId(item.id)}>
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    {canManage && (
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button size="icon" variant="ghost" onClick={() => openEdit(item)}>
+                            <Pencil className="w-4 h-4 text-slate-600" />
+                          </Button>
+                          <Button size="icon" variant="ghost" onClick={() => setDeleteId(item.id)}>
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -241,26 +248,28 @@ export default function AdminInformativos() {
                   Baixar anexo
                 </a>
               )}
-              <div className="flex gap-2 pt-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => openEdit(item)}
-                  className="gap-1"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  Editar
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setDeleteId(item.id)}
-                  className="text-red-600 gap-1"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Excluir
-                </Button>
-              </div>
+              {canManage && (
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openEdit(item)}
+                    className="gap-1"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Editar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setDeleteId(item.id)}
+                    className="text-red-600 gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Excluir
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
