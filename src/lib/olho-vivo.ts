@@ -9,6 +9,7 @@ export interface VehiclePosition {
   sentido: number
   horario: string
   acessivel: boolean
+  status: 'circulacao' | 'garagem'
 }
 
 export async function fetchVehiclePosition(prefixo: string): Promise<VehiclePosition> {

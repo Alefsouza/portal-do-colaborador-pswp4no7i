@@ -36,6 +36,16 @@ routerAdd('POST', '/backend/v1/olho-vivo/buscar-veiculo', (e) => {
     return e.json(503, { error: 'Token da API Olho Vivo não configurado.' })
   }
 
+  const codigoEmpresaRaw = $secrets.get('OLHO_VIVO_CODIGO_EMPRESA') || ''
+  const empresaCodigos = codigoEmpresaRaw
+    .split(',')
+    .map(function (c) {
+      return c.trim()
+    })
+    .filter(function (c) {
+      return c.length > 0
+    })
+
   try {
     $app
       .db()
@@ -119,46 +129,103 @@ routerAdd('POST', '/backend/v1/olho-vivo/buscar-veiculo', (e) => {
     } catch (_) {}
   }
 
-  let posRes
+  var circulacaoResult = null
+  var garagemResults = []
+  var errors = []
+
   try {
-    posRes = $http.send({
+    circulacaoResult = $http.send({
       url: 'https://api.olhovivo.sptrans.com.br/v2.1/Posicao',
       method: 'GET',
       headers: { Cookie: cookieStr },
       timeout: 15,
     })
+    if (circulacaoResult.statusCode !== 200) {
+      errors.push('Posicao: HTTP ' + circulacaoResult.statusCode)
+      circulacaoResult = null
+    }
   } catch (err) {
-    return e.json(502, { error: 'Falha ao buscar posição dos veículos.' })
+    errors.push('Posicao: ' + err.message)
+    circulacaoResult = null
   }
 
-  if (posRes.statusCode !== 200) {
+  for (var i = 0; i < empresaCodigos.length; i++) {
+    try {
+      var garagemRes = $http.send({
+        url:
+          'https://api.olhovivo.sptrans.com.br/v2.1/Posicao/Garagem?codigoEmpresa=' +
+          encodeURIComponent(empresaCodigos[i]),
+        method: 'GET',
+        headers: { Cookie: cookieStr },
+        timeout: 15,
+      })
+      if (garagemRes.statusCode === 200) {
+        garagemResults.push(garagemRes.json)
+      } else {
+        errors.push('Garagem ' + empresaCodigos[i] + ': HTTP ' + garagemRes.statusCode)
+      }
+    } catch (err) {
+      errors.push('Garagem ' + empresaCodigos[i] + ': ' + err.message)
+    }
+  }
+
+  if (!circulacaoResult && garagemResults.length === 0) {
     try {
       $app.db().newQuery("DELETE FROM _olho_vivo_cache WHERE id = 'session'").execute()
     } catch (_) {}
-    return e.json(502, { error: 'Erro ao consultar posições: HTTP ' + posRes.statusCode })
+    return e.json(502, {
+      error: 'Falha ao buscar posição dos veículos. ' + errors.join('; '),
+    })
   }
 
-  const data = posRes.json
-  if (!data || !data.l) {
-    return e.json(404, { error: 'Veículo não localizado' })
-  }
-
-  for (const line of data.l) {
-    if (!line.vs) continue
-    for (const vehicle of line.vs) {
-      if (String(vehicle.p) === String(prefixo)) {
-        return e.json(200, {
-          prefixo: String(vehicle.p),
-          latitude: vehicle.py,
-          longitude: vehicle.px,
-          acessivel: !!vehicle.a,
-          horario: vehicle.ta || '',
-          letreiro: line.c || '',
-          sentido: line.sl || 0,
-        })
+  if (circulacaoResult && circulacaoResult.json && circulacaoResult.json.l) {
+    for (var li = 0; li < circulacaoResult.json.l.length; li++) {
+      var line = circulacaoResult.json.l[li]
+      if (!line.vs) continue
+      for (var vi = 0; vi < line.vs.length; vi++) {
+        var vehicle = line.vs[vi]
+        if (String(vehicle.p) === String(prefixo)) {
+          return e.json(200, {
+            prefixo: String(vehicle.p),
+            latitude: vehicle.py,
+            longitude: vehicle.px,
+            acessivel: !!vehicle.a,
+            horario: vehicle.ta || '',
+            letreiro: line.c || '',
+            sentido: line.sl || 0,
+            status: 'circulacao',
+          })
+        }
       }
     }
   }
 
-  return e.json(404, { error: 'Veículo não localizado' })
+  for (var gi = 0; gi < garagemResults.length; gi++) {
+    var garagemData = garagemResults[gi]
+    if (!garagemData || !garagemData.l) continue
+    for (var gli = 0; gli < garagemData.l.length; gli++) {
+      var gline = garagemData.l[gli]
+      if (!gline.vs) continue
+      for (var gvi = 0; gvi < gline.vs.length; gvi++) {
+        var gvehicle = gline.vs[gvi]
+        if (String(gvehicle.p) === String(prefixo)) {
+          return e.json(200, {
+            prefixo: String(gvehicle.p),
+            latitude: gvehicle.py,
+            longitude: gvehicle.px,
+            acessivel: !!gvehicle.a,
+            horario: gvehicle.ta || '',
+            letreiro: gline.c || '',
+            sentido: gline.sl || 0,
+            status: 'garagem',
+          })
+        }
+      }
+    }
+  }
+
+  return e.json(404, {
+    error:
+      'Veículo não está transmitindo no momento. Pode estar desligado, em manutenção ou com o GPS inativo.',
+  })
 })

@@ -1,4 +1,4 @@
-import { useState, type ElementType } from 'react'
+import { useState, useEffect, useRef, type ElementType } from 'react'
 import {
   ArrowLeft,
   Search,
@@ -9,15 +9,24 @@ import {
   Route,
   Clock,
   Accessibility,
+  Navigation,
+  Warehouse,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { fetchVehiclePosition, type VehiclePosition } from '@/lib/olho-vivo'
 
 interface BuscarVeiculoViewProps {
   onBack: () => void
+}
+
+declare global {
+  interface Window {
+    L: typeof import('leaflet')
+  }
 }
 
 function DetailItem({
@@ -45,6 +54,40 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [position, setPosition] = useState<VehiclePosition | null>(null)
+  const mapRef = useRef<HTMLDivElement>(null)
+  const mapInstanceRef = useRef<ReturnType<Window['L']['map']> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove()
+        mapInstanceRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!position || !mapRef.current || !window.L) return
+
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove()
+      mapInstanceRef.current = null
+    }
+
+    const L = window.L
+    const map = L.map(mapRef.current).setView([position.latitude, position.longitude], 16)
+    mapInstanceRef.current = map
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map)
+
+    const marker = L.marker([position.latitude, position.longitude]).addTo(map)
+    marker.bindPopup(`<strong>Veículo ${position.prefixo}</strong>`).openPopup()
+
+    setTimeout(() => map.invalidateSize(), 100)
+  }, [position])
 
   const handleSearch = async () => {
     if (!prefixo.trim()) return
@@ -61,11 +104,6 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
     }
   }
 
-  const delta = 0.01
-  const mapUrl = position
-    ? `https://www.openstreetmap.org/export/embed.html?bbox=${position.longitude - delta},${position.latitude - delta},${position.longitude + delta},${position.latitude + delta}&layer=mapnik&marker=${position.latitude},${position.longitude}`
-    : ''
-
   return (
     <div className="space-y-6 animate-fade-in">
       <Button
@@ -77,7 +115,9 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
       </Button>
       <div>
         <h2 className="text-xl font-bold text-slate-900">Buscar Veículo</h2>
-        <p className="text-sm text-slate-500 mt-0.5">Localize um veículo da frota pelo prefixo.</p>
+        <p className="text-sm text-slate-500 mt-0.5">
+          Localize um veículo da frota pelo prefixo, em circulação ou na garagem.
+        </p>
       </div>
       <Card className="border-slate-200">
         <CardContent className="p-6 space-y-4">
@@ -118,8 +158,8 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
 
       {error && (
         <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-6 flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500" />
+          <CardContent className="p-6 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
             <p className="text-red-700 font-medium">{error}</p>
           </CardContent>
         </Card>
@@ -129,16 +169,30 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
         <>
           <Card className="border-slate-200 overflow-hidden">
             <CardContent className="p-0">
-              <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border-b border-green-100">
-                <MapPin className="w-4 h-4 text-green-600" />
-                <span className="text-sm font-medium text-green-800">Veículo localizado</span>
+              <div className="flex items-center justify-between px-4 py-3 bg-green-50 border-b border-green-100">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-800">Veículo localizado</span>
+                </div>
+                <Badge
+                  className={
+                    position.status === 'circulacao'
+                      ? 'bg-green-100 text-green-800 border-green-300 hover:bg-green-100'
+                      : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-100'
+                  }
+                >
+                  {position.status === 'circulacao' ? (
+                    <>
+                      <Navigation className="w-3 h-3 mr-1" /> Em Circulação
+                    </>
+                  ) : (
+                    <>
+                      <Warehouse className="w-3 h-3 mr-1" /> Na Garagem
+                    </>
+                  )}
+                </Badge>
               </div>
-              <iframe
-                title="Mapa do veículo"
-                src={mapUrl}
-                className="w-full h-[400px] border-0"
-                loading="lazy"
-              />
+              <div ref={mapRef} className="w-full h-[400px]" />
             </CardContent>
           </Card>
           <Card className="border-green-200">
@@ -157,6 +211,11 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
                   icon={Accessibility}
                   label="Acessível"
                   value={position.acessivel ? 'Sim' : 'Não'}
+                />
+                <DetailItem
+                  icon={position.status === 'circulacao' ? Navigation : Warehouse}
+                  label="Status"
+                  value={position.status === 'circulacao' ? 'Em Circulação' : 'Na Garagem'}
                 />
               </div>
             </CardContent>
