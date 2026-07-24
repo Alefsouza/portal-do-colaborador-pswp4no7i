@@ -1,10 +1,11 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import {
   login as loginApi,
   changePassword as changePasswordApi,
   type AuthUser,
 } from '@/services/auth'
 import { isAdminProfile } from '@/lib/admin-profiles'
+import pb from '@/lib/pocketbase/client'
 
 const TOKEN_KEY = 'portal_token'
 const USER_KEY = 'portal_user'
@@ -42,12 +43,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   })
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY))
 
+  useEffect(() => {
+    const storedToken = localStorage.getItem(TOKEN_KEY)
+    if (storedToken && !pb.authStore.isValid) {
+      try {
+        const storedUser = localStorage.getItem(USER_KEY)
+        const parsedUser = storedUser ? JSON.parse(storedUser) : null
+        pb.authStore.save(storedToken, parsedUser)
+      } catch {
+        pb.authStore.save(storedToken, null)
+      }
+    }
+    if (!storedToken && pb.authStore.isValid) {
+      pb.authStore.clear()
+    }
+  }, [])
+
   const login = async (cpf: string, senha: string) => {
     try {
       const result = await loginApi(cpf, senha)
       localStorage.setItem(TOKEN_KEY, result.token)
       localStorage.setItem('loginTimestamp', new Date().toISOString())
       localStorage.setItem(USER_KEY, JSON.stringify(result.user))
+      pb.authStore.save(result.token, result.user)
       setToken(result.token)
       setUser(result.user)
       return { error: null as string | null, user: result.user }
@@ -77,6 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(TOKEN_KEY, newToken)
     localStorage.setItem(USER_KEY, JSON.stringify(newUser))
     localStorage.setItem('loginTimestamp', new Date().toISOString())
+    pb.authStore.save(newToken, newUser)
     setToken(newToken)
     setUser(newUser)
   }
@@ -85,6 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const updatedUser = user ? { ...user, ...updates } : null
     if (updatedUser) {
       localStorage.setItem(USER_KEY, JSON.stringify(updatedUser))
+      if (token) pb.authStore.save(token, updatedUser)
       setUser(updatedUser)
     }
   }
@@ -93,6 +113,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
     localStorage.removeItem('loginTimestamp')
+    pb.authStore.clear()
     setToken(null)
     setUser(null)
   }
