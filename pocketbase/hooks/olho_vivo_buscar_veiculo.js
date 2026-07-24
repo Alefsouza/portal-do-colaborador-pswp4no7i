@@ -55,69 +55,27 @@ routerAdd('POST', '/backend/v1/olho-vivo/buscar-veiculo', (e) => {
       .execute()
   } catch (_) {}
 
-  let cookieStr = ''
-
-  try {
-    const row = new DynamicModel({ cookie: '', expires: 0 })
-    $app
-      .db()
-      .newQuery("SELECT cookie, expires FROM _olho_vivo_cache WHERE id = 'session' LIMIT 1")
-      .one(row)
-    if (row.cookie && Date.now() < row.expires) {
-      cookieStr = row.cookie
-    }
-  } catch (_) {}
-
-  if (!cookieStr) {
-    let authRes
+  function getCachedCookie() {
     try {
-      authRes = $http.send({
-        url:
-          'https://api.olhovivo.sptrans.com.br/v2.1/Login/Autenticar?token=' +
-          encodeURIComponent(sptransToken),
-        method: 'POST',
-        timeout: 15,
-      })
-    } catch (err) {
-      return e.json(502, { error: 'Falha ao conectar com a API SPTrans.' })
-    }
-
-    if (authRes.statusCode !== 200 || authRes.json !== true) {
-      return e.json(502, { error: 'Falha na autenticação com SPTrans. Token inválido.' })
-    }
-
-    if (authRes.cookies) {
-      const parts = []
-      for (const key in authRes.cookies) {
-        const c = authRes.cookies[key]
-        if (typeof c === 'string') {
-          parts.push(key + '=' + c)
-        } else if (c && c.value) {
-          parts.push(key + '=' + c.value)
-        }
+      const row = new DynamicModel({ cookie: '', expires: 0 })
+      $app
+        .db()
+        .newQuery("SELECT cookie, expires FROM _olho_vivo_cache WHERE id = 'session' LIMIT 1")
+        .one(row)
+      if (row.cookie && Date.now() < row.expires) {
+        return row.cookie
       }
-      cookieStr = parts.join('; ')
-    }
+    } catch (_) {}
+    return ''
+  }
 
-    if (!cookieStr && authRes.headers) {
-      const setCookie = authRes.headers['set-cookie'] || authRes.headers['Set-Cookie']
-      if (setCookie) {
-        if (Array.isArray(setCookie)) {
-          cookieStr = setCookie
-            .map(function (c) {
-              return c.split(';')[0]
-            })
-            .join('; ')
-        } else {
-          cookieStr = String(setCookie).split(';')[0]
-        }
-      }
-    }
+  function clearCachedCookie() {
+    try {
+      $app.db().newQuery("DELETE FROM _olho_vivo_cache WHERE id = 'session'").execute()
+    } catch (_) {}
+  }
 
-    if (!cookieStr) {
-      return e.json(502, { error: 'Falha ao obter cookie de sessão SPTrans.' })
-    }
-
+  function saveCachedCookie(cookieStr) {
     try {
       $app
         .db()
@@ -129,50 +87,178 @@ routerAdd('POST', '/backend/v1/olho-vivo/buscar-veiculo', (e) => {
     } catch (_) {}
   }
 
-  var circulacaoResult = null
-  var garagemResults = []
-  var errors = []
+  function extractCookiesFromResponse(authRes) {
+    var cookieStr = ''
 
-  try {
-    circulacaoResult = $http.send({
-      url: 'https://api.olhovivo.sptrans.com.br/v2.1/Posicao',
-      method: 'GET',
-      headers: { Cookie: cookieStr },
-      timeout: 15,
-    })
-    if (circulacaoResult.statusCode !== 200) {
-      errors.push('Posicao: HTTP ' + circulacaoResult.statusCode)
-      circulacaoResult = null
+    if (authRes.cookies) {
+      var parts = []
+      for (var key in authRes.cookies) {
+        var c = authRes.cookies[key]
+        if (typeof c === 'string') {
+          parts.push(key + '=' + c)
+        } else if (c && c.value) {
+          parts.push(key + '=' + c.value)
+        }
+      }
+      cookieStr = parts.join('; ')
     }
-  } catch (err) {
-    errors.push('Posicao: ' + err.message)
-    circulacaoResult = null
+
+    if (!cookieStr && authRes.headers) {
+      var setCookie = authRes.headers['set-cookie'] || authRes.headers['Set-Cookie']
+      if (setCookie) {
+        if (Array.isArray(setCookie)) {
+          var pairs = []
+          for (var i = 0; i < setCookie.length; i++) {
+            var raw = String(setCookie[i])
+            var nameValue = raw.split(';')[0].trim()
+            if (nameValue) pairs.push(nameValue)
+          }
+          cookieStr = pairs.join('; ')
+        } else {
+          cookieStr = String(setCookie).split(';')[0].trim()
+        }
+      }
+    }
+
+    $app.logger().info('SPTrans login response', {
+      statusCode: authRes.statusCode,
+      hasCookies: !!authRes.cookies,
+      cookieKeys: authRes.cookies ? Object.keys(authRes.cookies).join(',') : '',
+      setCookieHeader: authRes.headers
+        ? authRes.headers['set-cookie'] || authRes.headers['Set-Cookie'] || ''
+        : '',
+      extractedCookie: cookieStr ? cookieStr.substring(0, 80) + '...' : '(empty)',
+    })
+
+    return cookieStr
   }
 
-  for (var i = 0; i < empresaCodigos.length; i++) {
+  function authenticateSPTrans() {
+    var authRes
     try {
-      var garagemRes = $http.send({
+      authRes = $http.send({
         url:
-          'https://api.olhovivo.sptrans.com.br/v2.1/Posicao/Garagem?codigoEmpresa=' +
-          encodeURIComponent(empresaCodigos[i]),
+          'https://api.olhovivo.sptrans.com.br/v2.1/Login/Autenticar?token=' +
+          encodeURIComponent(sptransToken),
+        method: 'POST',
+        timeout: 15,
+      })
+    } catch (err) {
+      $app.logger().error('SPTrans auth transport error', 'message', err.message)
+      return ''
+    }
+
+    if (authRes.statusCode !== 200 || authRes.json !== true) {
+      $app
+        .logger()
+        .error(
+          'SPTrans auth failed',
+          'statusCode',
+          authRes.statusCode,
+          'body',
+          JSON.stringify(authRes.json),
+        )
+      return ''
+    }
+
+    var cookieStr = extractCookiesFromResponse(authRes)
+
+    if (!cookieStr) {
+      $app
+        .logger()
+        .error(
+          'SPTrans auth: no cookie extracted',
+          'headers',
+          JSON.stringify(authRes.headers || {}),
+        )
+      return ''
+    }
+
+    saveCachedCookie(cookieStr)
+    $app.logger().info('SPTrans auth success, cookie cached', 'cookieLength', cookieStr.length)
+    return cookieStr
+  }
+
+  function sptransGet(url, cookieStr) {
+    var result = { statusCode: 0, json: null, error: null }
+    try {
+      var res = $http.send({
+        url: url,
         method: 'GET',
         headers: { Cookie: cookieStr },
         timeout: 15,
       })
-      if (garagemRes.statusCode === 200) {
-        garagemResults.push(garagemRes.json)
-      } else {
-        errors.push('Garagem ' + empresaCodigos[i] + ': HTTP ' + garagemRes.statusCode)
-      }
+      result.statusCode = res.statusCode
+      result.json = res.json
     } catch (err) {
-      errors.push('Garagem ' + empresaCodigos[i] + ': ' + err.message)
+      result.error = err.message
+    }
+    return result
+  }
+
+  function sptransGetWithReauth(url, cookieStr) {
+    var result = sptransGet(url, cookieStr)
+
+    if (result.statusCode === 401) {
+      $app.logger().info('SPTrans 401 received, reauthenticating', 'url', url)
+      clearCachedCookie()
+      var newCookie = authenticateSPTrans()
+      if (newCookie) {
+        $app.logger().info('SPTrans reauth success, retrying request', 'url', url)
+        result = sptransGet(url, newCookie)
+      } else {
+        $app.logger().error('SPTrans reauth failed, cannot retry', 'url', url)
+        result.error = 'Reautenticação falhou'
+      }
+    }
+
+    return result
+  }
+
+  var cookieStr = getCachedCookie()
+  if (!cookieStr) {
+    cookieStr = authenticateSPTrans()
+    if (!cookieStr) {
+      return e.json(502, { error: 'Falha na autenticação com SPTrans. Token inválido.' })
+    }
+  } else {
+    $app.logger().info('SPTrans: using cached cookie', 'cookieLength', cookieStr.length)
+  }
+
+  var circulacaoResult = null
+  var garagemResults = []
+  var errors = []
+
+  var posicaoUrl = 'https://api.olhovivo.sptrans.com.br/v2.1/Posicao'
+  var circResp = sptransGetWithReauth(posicaoUrl, cookieStr)
+  if (circResp.error) {
+    errors.push('Posicao: ' + circResp.error)
+  } else if (circResp.statusCode === 200) {
+    circulacaoResult = circResp
+  } else {
+    errors.push('Posicao: HTTP ' + circResp.statusCode)
+  }
+
+  if (circResp.statusCode === 401) {
+    cookieStr = getCachedCookie() || cookieStr
+  }
+
+  for (var i = 0; i < empresaCodigos.length; i++) {
+    var garagemUrl =
+      'https://api.olhovivo.sptrans.com.br/v2.1/Posicao/Garagem?codigoEmpresa=' +
+      encodeURIComponent(empresaCodigos[i])
+    var garResp = sptransGetWithReauth(garagemUrl, cookieStr)
+    if (garResp.error) {
+      errors.push('Garagem ' + empresaCodigos[i] + ': ' + garResp.error)
+    } else if (garResp.statusCode === 200) {
+      garagemResults.push(garResp.json)
+    } else {
+      errors.push('Garagem ' + empresaCodigos[i] + ': HTTP ' + garResp.statusCode)
     }
   }
 
   if (!circulacaoResult && garagemResults.length === 0) {
-    try {
-      $app.db().newQuery("DELETE FROM _olho_vivo_cache WHERE id = 'session'").execute()
-    } catch (_) {}
+    clearCachedCookie()
     return e.json(502, {
       error: 'Falha ao buscar posição dos veículos. ' + errors.join('; '),
     })
