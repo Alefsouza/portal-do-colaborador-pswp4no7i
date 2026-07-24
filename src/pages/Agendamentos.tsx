@@ -1,4 +1,5 @@
 import { CalendarClock } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useAuth } from '@/hooks/use-auth'
 import { AgendamentosForm } from '@/components/agendamentos/AgendamentosForm'
@@ -6,8 +7,16 @@ import { AgendamentosList } from '@/components/agendamentos/AgendamentosList'
 
 export default function Agendamentos() {
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') || 'novo'
 
   if (!user?.id) return null
+
+  const handleTabChange = (value: string) => {
+    const params = new URLSearchParams(searchParams)
+    params.set('tab', value)
+    setSearchParams(params, { replace: true })
+  }
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -21,7 +30,7 @@ export default function Agendamentos() {
         </div>
       </div>
 
-      <Tabs defaultValue="novo" className="w-full">
+      <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="bg-slate-100 p-1">
           <TabsTrigger
             value="novo"

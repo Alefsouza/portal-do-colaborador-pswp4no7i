@@ -1,25 +1,29 @@
+import { ClientResponseError } from 'pocketbase'
+import pb from '@/lib/pocketbase/client'
+
 export interface VehiclePosition {
-  lat: number
-  lng: number
+  prefixo: string
+  latitude: number
+  longitude: number
+  letreiro: string
+  sentido: number
+  horario: string
+  acessivel: boolean
 }
-
-const FIXED_LOCATION: VehiclePosition = {
-  lat: -23.55052,
-  lng: -46.633308,
-}
-
-// Placeholder: Olho Vivo API integration point
-// const OLHO_VIVO_API_BASE_URL = 'https://api.olhovivo.sptrans.com.br/v2.1/'
-// Real implementation will require:
-//   1. An API key (token) passed via POST /Login/Autenticar?token={apiKey}
-//   2. A cookie-based session returned by the auth call
-//   3. A GET /Posicao request that returns all vehicles with their GPS coordinates
-//   4. Filter the response by the vehicle prefix (field `p` -> prefixo)
 
 export async function fetchVehiclePosition(prefixo: string): Promise<VehiclePosition> {
-  await new Promise((resolve) => setTimeout(resolve, 800))
-  // Placeholder: returns fixed São Paulo city center coordinates
-  // In production, filter the /Posicao response where vehicle prefix matches `prefixo`
-  void prefixo
-  return { ...FIXED_LOCATION }
+  try {
+    const res = await pb.send('/backend/v1/olho-vivo/buscar-veiculo', {
+      method: 'POST',
+      body: JSON.stringify({ prefixo }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+    return res as VehiclePosition
+  } catch (err) {
+    if (err instanceof ClientResponseError) {
+      const message = (err.response as { error?: string })?.error || err.message
+      throw new Error(message)
+    }
+    throw new Error('Erro ao buscar veículo')
+  }
 }

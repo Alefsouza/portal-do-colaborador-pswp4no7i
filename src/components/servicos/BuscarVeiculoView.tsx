@@ -1,5 +1,15 @@
-import { useState } from 'react'
-import { ArrowLeft, Search, MapPin } from 'lucide-react'
+import { useState, type ElementType } from 'react'
+import {
+  ArrowLeft,
+  Search,
+  MapPin,
+  Loader2,
+  AlertCircle,
+  Bus,
+  Route,
+  Clock,
+  Accessibility,
+} from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,28 +20,50 @@ interface BuscarVeiculoViewProps {
   onBack: () => void
 }
 
+function DetailItem({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: ElementType
+  label: string
+  value: string
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <Icon className="w-5 h-5 text-green-600 mt-0.5" />
+      <div>
+        <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">{label}</p>
+        <p className="text-slate-800 font-semibold">{value}</p>
+      </div>
+    </div>
+  )
+}
+
 export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
   const [prefixo, setPrefixo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [position, setPosition] = useState<VehiclePosition | null>(null)
 
   const handleSearch = async () => {
     if (!prefixo.trim()) return
     setLoading(true)
+    setError(null)
+    setPosition(null)
     try {
       const pos = await fetchVehiclePosition(prefixo.trim())
       setPosition(pos)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao buscar veículo')
     } finally {
       setLoading(false)
     }
   }
 
   const delta = 0.01
-  const bbox = position
-    ? `${position.lng - delta},${position.lat - delta},${position.lng + delta},${position.lat + delta}`
-    : ''
   const mapUrl = position
-    ? `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&marker=${position.lat},${position.lng}`
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${position.longitude - delta},${position.latitude - delta},${position.longitude + delta},${position.latitude + delta}&layer=mapnik&marker=${position.latitude},${position.longitude}`
     : ''
 
   return (
@@ -43,12 +75,10 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
       >
         <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
       </Button>
-
       <div>
         <h2 className="text-xl font-bold text-slate-900">Buscar Veículo</h2>
         <p className="text-sm text-slate-500 mt-0.5">Localize um veículo da frota pelo prefixo.</p>
       </div>
-
       <Card className="border-slate-200">
         <CardContent className="p-6 space-y-4">
           <div className="space-y-2">
@@ -56,7 +86,7 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
             <div className="flex gap-3">
               <Input
                 id="prefixo"
-                placeholder="Ex: AB123"
+                placeholder="Ex: 12345"
                 value={prefixo}
                 onChange={(e) => setPrefixo(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -67,7 +97,11 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
                 disabled={loading || !prefixo.trim()}
                 className="bg-green-600 hover:bg-green-700 text-white"
               >
-                <Search className="w-4 h-4 mr-1" />
+                {loading ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4 mr-1" />
+                )}
                 {loading ? 'Buscando...' : 'Buscar'}
               </Button>
             </div>
@@ -75,23 +109,59 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
         </CardContent>
       </Card>
 
-      {position && (
-        <Card className="border-slate-200 overflow-hidden">
-          <CardContent className="p-0">
-            <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border-b border-green-100">
-              <MapPin className="w-4 h-4 text-green-600" />
-              <span className="text-sm font-medium text-green-800">
-                Veículo localizado: {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
-              </span>
-            </div>
-            <iframe
-              title="Mapa do veículo"
-              src={mapUrl}
-              className="w-full h-[400px] border-0"
-              loading="lazy"
-            />
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
+          <span className="ml-2 text-slate-500">Buscando veículo...</span>
+        </div>
+      )}
+
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-6 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500" />
+            <p className="text-red-700 font-medium">{error}</p>
           </CardContent>
         </Card>
+      )}
+
+      {position && (
+        <>
+          <Card className="border-slate-200 overflow-hidden">
+            <CardContent className="p-0">
+              <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border-b border-green-100">
+                <MapPin className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-green-800">Veículo localizado</span>
+              </div>
+              <iframe
+                title="Mapa do veículo"
+                src={mapUrl}
+                className="w-full h-[400px] border-0"
+                loading="lazy"
+              />
+            </CardContent>
+          </Card>
+          <Card className="border-green-200">
+            <CardContent className="p-6">
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Detalhes do Veículo</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <DetailItem icon={Bus} label="Prefixo" value={position.prefixo} />
+                <DetailItem icon={Route} label="Linha/Letreiro" value={position.letreiro} />
+                <DetailItem
+                  icon={MapPin}
+                  label="Sentido"
+                  value={position.sentido === 1 ? 'Ida' : position.sentido === 2 ? 'Volta' : '—'}
+                />
+                <DetailItem icon={Clock} label="Horário da localização" value={position.horario} />
+                <DetailItem
+                  icon={Accessibility}
+                  label="Acessível"
+                  value={position.acessivel ? 'Sim' : 'Não'}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Wrench, CalendarClock, Bus, ArrowRight } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useAuth } from '@/hooks/use-auth'
@@ -9,7 +9,18 @@ type View = 'cards' | 'escala' | 'buscar-veiculo'
 
 export default function Servicos() {
   const { user } = useAuth()
-  const [view, setView] = useState<View>('cards')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = searchParams.get('view')
+
+  const setView = (newView: View) => {
+    const params = new URLSearchParams(searchParams)
+    if (newView === 'cards') {
+      params.delete('view')
+    } else {
+      params.set('view', newView)
+    }
+    setSearchParams(params, { replace: true })
+  }
 
   if (view === 'escala') {
     return (
@@ -32,7 +43,6 @@ export default function Servicos() {
           <p className="text-slate-500 mt-0.5 text-sm">Escolha um serviço para começar.</p>
         </div>
       </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card
           className="cursor-pointer border-slate-200 hover:border-green-500 hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
@@ -49,7 +59,6 @@ export default function Servicos() {
             </div>
           </CardContent>
         </Card>
-
         <Card
           className="cursor-pointer border-slate-200 hover:border-green-500 hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
           onClick={() => setView('buscar-veiculo')}
