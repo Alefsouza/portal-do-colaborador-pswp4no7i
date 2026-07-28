@@ -7,8 +7,8 @@ import {
   Hash,
   Loader2,
   AlertCircle,
-  Footprints,
   MapPin,
+  MapPinned,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -216,7 +216,7 @@ export function EscalaView({ userName }: EscalaViewProps) {
                       <DetailItem icon={Clock} label="Início" value={item.inicio} />
                       <DetailItem icon={Clock} label="Fim" value={item.fim} />
                       <DetailItem
-                        icon={Footprints}
+                        icon={MapPinned}
                         label="Pegada"
                         value={item.pegada}
                         className="col-span-2"
