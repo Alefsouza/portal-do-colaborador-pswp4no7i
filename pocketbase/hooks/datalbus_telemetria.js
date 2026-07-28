@@ -6,28 +6,10 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     return e.json(401, { error: 'Token não fornecido.' })
   }
 
-  const jwtSecret = $secrets.get('PB_SUPERUSER_TOKEN') || 'portal-colaborador-secret'
-  let payload
-  try {
-    payload = $security.parseJWT(authToken, jwtSecret)
-  } catch (_) {
-    return e.json(401, { error: 'Token inválido.' })
-  }
-
-  if (!payload || !payload.id) {
-    return e.json(401, { error: 'Token inválido.' })
-  }
-
-  let usuarioRecord
-  try {
-    usuarioRecord = $app.findRecordById('usuarios', payload.id)
-  } catch (_) {
-    return e.json(401, { error: 'Usuário não encontrado.' })
-  }
-
   const body = e.requestInfo().body || {}
   const dataInicial = (body.data_inicial || '').trim()
   const dataFinal = (body.data_final || '').trim()
+  const driverId = (body.driver_id || '').trim()
 
   if (!dataInicial || !dataFinal) {
     var fieldErrors = {}
@@ -36,17 +18,11 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     return e.json(400, { error: 'Campos obrigatórios não fornecidos', details: fieldErrors })
   }
 
-  const driverField = $secrets.get('DATALBUS_DRIVER_FIELD') || 'registro'
-  var driverId = ''
-  if (body.driver_id && String(body.driver_id).trim()) {
-    driverId = String(body.driver_id).trim()
-  } else {
-    driverId = usuarioRecord.getString(driverField) || ''
+  if (!driverId) {
+    return e.json(400, { error: 'driver_id é obrigatório' })
   }
 
-  if (!driverId) {
-    return e.json(400, { error: 'Não foi possível identificar o motorista.' })
-  }
+  const driverField = $secrets.get('DATALBUS_DRIVER_FIELD') || 'registro'
 
   const datalbusEmail = $secrets.get('DATALBUS_EMAIL') || ''
   const datalbusPassword = $secrets.get('DATALBUS_PASSWORD') || ''

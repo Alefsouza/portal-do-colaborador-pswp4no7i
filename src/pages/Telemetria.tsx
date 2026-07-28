@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Loader2, Search, AlertCircle, Gauge } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table'
 import { fetchTelemetry, type TelemetryResponse, type TelemetryScore } from '@/services/telemetry'
 import { cn } from '@/lib/utils'
+import pb from '@/lib/pocketbase/client'
 
 function toDateStr(date: Date): string {
   const y = date.getFullYear()
@@ -82,18 +83,32 @@ function formatCounter(tipo: string, count: number): string {
 }
 
 export default function Telemetria() {
-  useAuth()
+  const { user } = useAuth()
   const [dataInicial, setDataInicial] = useState<Date | undefined>(undefined)
   const [dataFinal, setDataFinal] = useState<Date | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<TelemetryResponse | null>(null)
   const [hasConsulted, setHasConsulted] = useState(false)
   const [error, setError] = useState(false)
+  const [driverId, setDriverId] = useState<string>('')
+
+  useEffect(() => {
+    if (!user?.id) return
+    pb.collection('usuarios')
+      .getOne(user.id)
+      .then((record) => {
+        const reg = (record as Record<string, unknown>).registro as string
+        const cpf = (record as Record<string, unknown>).cpf as string
+        setDriverId(reg || cpf || '')
+      })
+      .catch(() => {})
+  }, [user?.id])
 
   const isValid = useMemo(() => {
     if (!dataInicial || !dataFinal) return false
+    if (!driverId) return false
     return dataInicial <= dataFinal
-  }, [dataInicial, dataFinal])
+  }, [dataInicial, dataFinal, driverId])
 
   const score = useMemo(() => extractScore(results?.pontuacao), [results])
   const sortedEvents = useMemo(() => {
@@ -110,6 +125,7 @@ export default function Telemetria() {
       const data = await fetchTelemetry({
         dataInicial: toDateStr(dataInicial),
         dataFinal: toDateStr(dataFinal),
+        driverId,
       })
       setResults(data)
       setHasConsulted(true)

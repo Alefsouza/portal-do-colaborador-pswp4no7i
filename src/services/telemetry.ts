@@ -29,7 +29,7 @@ export interface TelemetryResponse {
 export interface TelemetryQuery {
   dataInicial: string
   dataFinal: string
-  driverId?: string
+  driverId: string
 }
 
 export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryResponse> {
@@ -39,7 +39,7 @@ export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRe
       body: JSON.stringify({
         data_inicial: query.dataInicial,
         data_final: query.dataFinal,
-        ...(query.driverId ? { driver_id: query.driverId } : {}),
+        driver_id: query.driverId,
       }),
       headers: {
         'Content-Type': 'application/json',
