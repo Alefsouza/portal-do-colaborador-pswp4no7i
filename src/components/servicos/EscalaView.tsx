@@ -30,6 +30,7 @@ function DetailItem({
   icon: Icon,
   label,
   value,
+  className,
 }: {
   icon: ElementType
   label: string
