@@ -19,6 +19,13 @@ export async function getUnreadPopups(
   })) as PopupEnvio[]
 }
 
+export async function getAllPopups(userId: string): Promise<PopupEnvio[]> {
+  return (await pb.collection('popup_envios').getFullList({
+    filter: `id_usuario = "${userId}"`,
+    sort: '-created',
+  })) as PopupEnvio[]
+}
+
 export async function markPopupAsRead(id: string): Promise<void> {
   await pb.collection('popup_envios').update(id, { status_lido: true })
 }

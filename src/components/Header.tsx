@@ -1,4 +1,4 @@
-import { Menu, Bell, Bus, LogOut, ChevronDown, ShieldCheck, UserRound } from 'lucide-react'
+import { Menu, Bus, LogOut, ChevronDown, ShieldCheck, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAuth } from '@/hooks/use-auth'
 import { getInitials } from '@/lib/utils'
+import { NotificationBell } from '@/components/NotificationBell'
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user, logout, hasAdminAccess } = useAuth()
@@ -50,10 +51,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             Administrativo
           </Button>
         )}
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="w-5 h-5 text-slate-600" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-primary rounded-full" />
-        </Button>
+        <NotificationBell />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2.5 cursor-pointer">

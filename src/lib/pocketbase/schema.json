@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-28T17:02:20.176Z",
+  "generatedAt": "2026-07-28T17:13:22.342Z",
   "collections": [
     {
       "name": "users",
@@ -378,6 +378,50 @@
       ],
       "indexes": [
         "CREATE INDEX `idx_popup_envios_usuario_created` ON `popup_envios` (id_usuario, created)"
+      ]
+    },
+    {
+      "name": "informativos_visualizados",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "id_usuario",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "usuarios"
+        },
+        {
+          "name": "id_informativo",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "informativos"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_informativos_visualizados_usuario_informativo ON informativos_visualizados (id_usuario, id_informativo)"
       ]
     }
   ]
