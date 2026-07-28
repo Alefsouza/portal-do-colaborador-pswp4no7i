@@ -1,49 +1,57 @@
-export interface TelemetryRecord {
+import { ClientResponseError } from 'pocketbase'
+import pb from '@/lib/pocketbase/client'
+
+export interface TelemetryEvent {
   data: string
-  pontuacao: number
-  infracoes: string
+  tipo: string
+  localizacao: string
+  veiculo: string
+  gravidade: string
+}
+
+export interface TelemetryScore {
+  score?: number
+  pontuacao?: number
+  total?: number
+  valor?: number
+  nota?: number
+  overall_score?: number
+  total_score?: number
+  [key: string]: unknown
+}
+
+export interface TelemetryResponse {
+  pontuacao: TelemetryScore
+  eventos: TelemetryEvent[]
+  resumo: Record<string, number>
 }
 
 export interface TelemetryQuery {
-  dataInicial: Date
-  dataFinal: Date
+  dataInicial: string
+  dataFinal: string
+  driverId?: string
 }
 
-const SIMULATED_DATA: TelemetryRecord[] = [
-  { data: '15/09/2024', pontuacao: 85, infracoes: 'Excesso de velocidade, 3 pontos na carteira' },
-  { data: '16/09/2024', pontuacao: 72, infracoes: 'Frenagem brusca em via molhada' },
-  { data: '17/09/2024', pontuacao: 95, infracoes: 'Nenhuma infração registrada' },
-  { data: '18/09/2024', pontuacao: 60, infracoes: 'Uso de celular durante condução, 4 pontos' },
-  { data: '19/09/2024', pontuacao: 90, infracoes: 'Curva fechada em velocidade elevada' },
-  {
-    data: '20/09/2024',
-    pontuacao: 45,
-    infracoes: 'Excesso de velocidade + avanço de semáforo, 7 pontos',
-  },
-  { data: '21/09/2024', pontuacao: 88, infracoes: 'Aceleração brusca em via urbana' },
-]
-
-const SIMULATED_TIMEOUT = 1000
-
-export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRecord[]> {
-  // TODO: Replace with real API URL
-  // const API_URL = 'https://api.viasudeste.com.br/telemetria'
-  // TODO: Add authentication headers
-  // const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-
-  // Simulated fetch — replace with:
-  // const res = await fetch(`${API_URL}?dataInicial=...&dataFinal=...`, { headers })
-  // if (!res.ok) throw new Error('API error')
-  // return res.json()
-
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, SIMULATED_TIMEOUT)
-    // Simulate ~10% failure rate for error handling demonstration
-    if (Math.random() < 0.0) {
-      clearTimeout(timer)
-      reject(new Error('SIMULATED_NETWORK_TIMEOUT'))
+export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryResponse> {
+  try {
+    const res = await pb.send('/backend/v1/datalbus/telemetria', {
+      method: 'POST',
+      body: JSON.stringify({
+        data_inicial: query.dataInicial,
+        data_final: query.dataFinal,
+        ...(query.driverId ? { driver_id: query.driverId } : {}),
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(pb.authStore.token ? { Authorization: pb.authStore.token } : {}),
+      },
+    })
+    return res as TelemetryResponse
+  } catch (err) {
+    if (err instanceof ClientResponseError) {
+      const message = (err.response as { error?: string })?.error || err.message
+      throw new Error(message)
     }
-  })
-
-  return SIMULATED_DATA
+    throw new Error('Erro ao buscar dados de telemetria')
+  }
 }
