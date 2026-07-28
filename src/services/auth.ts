@@ -6,6 +6,8 @@ export interface AuthUser {
   primeiro_acesso: boolean
   departamento: string
   perfil: string
+  avatar?: string
+  email?: string
 }
 
 export interface LoginResponse {

@@ -1,35 +1,28 @@
 routerAdd('POST', '/backend/v1/upload-avatar', (e) => {
   const authHeader = e.request.header.get('Authorization')
   if (!authHeader) {
-    return e.unauthorizedError('Token não fornecido')
+    return e.json(401, { error: 'Usuário não encontrado.' })
   }
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
 
-  let userRecord
+  const jwtSecret = $secrets.get('PB_SUPERUSER_TOKEN') || 'portal-colaborador-secret'
+
+  let payload
   try {
-    userRecord = $app.findAuthRecordByToken(token)
+    payload = $security.parseJWT(token, jwtSecret)
   } catch (_) {
-    let payload
-    try {
-      payload = $security.parseUnverifiedJWT(token)
-    } catch (_) {
-      return e.unauthorizedError('Token inválido')
-    }
-    if (payload.id) {
-      try {
-        userRecord = $app.findRecordById('users', payload.id)
-      } catch (_) {
-        return e.unauthorizedError('Usuário não encontrado')
-      }
-    } else if (payload.email) {
-      try {
-        userRecord = $app.findAuthRecordByEmail('users', payload.email)
-      } catch (_) {
-        return e.unauthorizedError('Usuário não encontrado')
-      }
-    } else {
-      return e.unauthorizedError('Usuário não encontrado')
-    }
+    return e.json(401, { error: 'Usuário não encontrado.' })
+  }
+
+  if (!payload || !payload.id) {
+    return e.json(401, { error: 'Usuário não encontrado.' })
+  }
+
+  let usuario
+  try {
+    usuario = $app.findRecordById('usuarios', payload.id)
+  } catch (_) {
+    return e.json(401, { error: 'Usuário não encontrado.' })
   }
 
   const files = e.findUploadedFiles('avatar')
@@ -54,9 +47,9 @@ routerAdd('POST', '/backend/v1/upload-avatar', (e) => {
     return e.badRequestError('Arquivo muito grande. Máximo 5MB.')
   }
 
-  userRecord.set('avatar', file)
-  $app.save(userRecord)
+  usuario.set('avatar', file)
+  $app.save(usuario)
 
-  const avatarFilename = userRecord.getString('avatar')
-  return e.json(200, { avatar: avatarFilename, userId: userRecord.id })
+  const avatarFilename = usuario.getString('avatar')
+  return e.json(200, { avatar: avatarFilename, userId: usuario.id })
 })

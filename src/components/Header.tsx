@@ -11,15 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useAuth } from '@/hooks/use-auth'
-
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-}
+import { getInitials } from '@/lib/utils'
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user, logout, hasAdminAccess } = useAuth()
@@ -66,10 +58,10 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2.5 cursor-pointer">
               <Avatar className="w-9 h-9">
-                <AvatarImage
-                  src={`https://img.usecurling.com/ppl/thumbnail?gender=male&seed=${encodeURIComponent(nome)}`}
-                />
-                <AvatarFallback>{getInitials(nome)}</AvatarFallback>
+                {user?.avatar && <AvatarImage src={user.avatar} className="object-cover" />}
+                <AvatarFallback className="bg-slate-200 text-slate-700 font-semibold text-sm">
+                  {getInitials(nome)}
+                </AvatarFallback>
               </Avatar>
               <div className="hidden sm:block text-left">
                 <p className="text-sm font-semibold text-slate-900 leading-none">{nome}</p>

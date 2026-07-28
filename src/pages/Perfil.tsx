@@ -10,15 +10,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { getUsuario, type Usuario } from '@/services/usuarios'
 import { validateAvatarFile, uploadAvatar } from '@/services/avatar'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
-
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-}
+import { getInitials } from '@/lib/utils'
 
 export default function Perfil() {
   const { user, token, updateUser } = useAuth()
@@ -45,12 +37,8 @@ export default function Perfil() {
   }, [loadData])
 
   useEffect(() => {
-    const nome = user?.nome_completo || 'Colaborador'
-    setAvatarUrl(
-      user?.avatar ||
-        `https://img.usecurling.com/ppl/thumbnail?gender=male&seed=${encodeURIComponent(nome)}`,
-    )
-  }, [user?.avatar, user?.nome_completo])
+    setAvatarUrl(user?.avatar || '')
+  }, [user?.avatar])
 
   const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -110,8 +98,10 @@ export default function Perfil() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="relative group">
               <Avatar className="w-20 h-20">
-                <AvatarImage src={avatarUrl} />
-                <AvatarFallback className="text-lg">{getInitials(nome)}</AvatarFallback>
+                {avatarUrl && <AvatarImage src={avatarUrl} className="object-cover" />}
+                <AvatarFallback className="bg-slate-200 text-slate-700 font-semibold text-lg">
+                  {getInitials(nome)}
+                </AvatarFallback>
               </Avatar>
               <button
                 type="button"

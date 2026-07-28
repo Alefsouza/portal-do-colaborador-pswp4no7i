@@ -25,5 +25,5 @@ export async function uploadAvatar(token: string, file: File): Promise<string> {
     headers: { Authorization: token },
   })
 
-  return `${pb.baseURL}/api/files/users/${result.userId}/${result.avatar}`
+  return `${pb.baseURL}/api/files/usuarios/${result.userId}/${result.avatar}?t=${Date.now()}`
 }

@@ -118,7 +118,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null)
   }
 
-  const hasAdminAccess = !!localStorage.getItem('admin_token') || isAdminProfile(user?.perfil)
+  const hasAdminAccess = isAdminProfile(user?.perfil)
 
   return (
     <AuthContext.Provider
