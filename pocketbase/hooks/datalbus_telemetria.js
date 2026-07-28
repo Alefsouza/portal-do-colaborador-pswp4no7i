@@ -9,7 +9,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
   const body = e.requestInfo().body || {}
   const dataInicial = (body.data_inicial || '').trim()
   const dataFinal = (body.data_final || '').trim()
-  const driverId = (body.driver_id || '').trim()
+  let driverId = (body.driver_id || '').trim()
 
   if (!dataInicial || !dataFinal) {
     var fieldErrors = {}
@@ -20,6 +20,11 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
 
   if (!driverId) {
     return e.json(400, { error: 'driver_id é obrigatório' })
+  }
+
+  driverId = driverId.replace(/^0+/, '')
+  if (!driverId) {
+    return e.json(400, { error: 'driver_id inválido após normalização' })
   }
 
   var dateRegex = /^\d{4}-\d{2}-\d{2}$/
@@ -47,9 +52,9 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
       })
     }
   } else if (driverField === 'registro') {
-    if (driverId.length < 3) {
+    if (driverId.length < 1) {
       return e.json(400, {
-        error: 'driver_id inválido para o campo registro. Deve conter pelo menos 3 caracteres.',
+        error: 'driver_id inválido para o campo registro.',
       })
     }
   }
