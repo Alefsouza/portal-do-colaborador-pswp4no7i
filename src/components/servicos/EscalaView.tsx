@@ -5,7 +5,6 @@ import {
   Route,
   Bus,
   Hash,
-  Navigation,
   Loader2,
   AlertCircle,
   Footprints,
@@ -35,9 +34,15 @@ function DetailItem({
   icon: ElementType
   label: string
   value: string
+  className?: string
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-lg bg-white/60 p-3 transition-colors hover:bg-white">
+    <div
+      className={cn(
+        'flex items-start gap-3 rounded-lg bg-white/60 p-3 transition-colors hover:bg-white',
+        className,
+      )}
+    >
       <Icon className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
       <div className="min-w-0">
         <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">{label}</p>
@@ -202,15 +207,19 @@ export function EscalaView({ userName }: EscalaViewProps) {
                         Escala {idx + 1} de {items.length}
                       </span>
                     </div>
-                    <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="p-6 grid grid-cols-2 gap-2 md:gap-3">
                       <DetailItem icon={CalendarDays} label="Data" value={item.data} />
                       <DetailItem icon={Bus} label="Veículo" value={item.veiculo} />
                       <DetailItem icon={Route} label="Linha" value={item.linha} />
                       <DetailItem icon={Hash} label="Tabela" value={item.tabela} />
                       <DetailItem icon={Clock} label="Início" value={item.inicio} />
                       <DetailItem icon={Clock} label="Fim" value={item.fim} />
-                      <DetailItem icon={Footprints} label="Pegada" value={item.pegada} />
-                      <DetailItem icon={Navigation} label="Status" value="Escala atribuída" />
+                      <DetailItem
+                        icon={Footprints}
+                        label="Pegada"
+                        value={item.pegada}
+                        className="col-span-2"
+                      />
                     </div>
                   </CardContent>
                 </Card>
