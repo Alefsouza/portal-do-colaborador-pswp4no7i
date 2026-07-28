@@ -9,6 +9,7 @@ import {
   AlertCircle,
   MapPin,
   MapPinned,
+  ArrowLeft,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -80,7 +81,7 @@ function generateDateCards(): DateCard[] {
   return result
 }
 
-export function EscalaView({ userName }: EscalaViewProps) {
+export function EscalaView({ userName, onBack }: EscalaViewProps) {
   const [items, setItems] = useState<EscalaItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -104,6 +105,14 @@ export function EscalaView({ userName }: EscalaViewProps) {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <Button
+        variant="ghost"
+        onClick={onBack}
+        aria-label="Voltar"
+        className="text-slate-600 hover:text-slate-900 -ml-2"
+      >
+        <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
+      </Button>
       <div>
         <h2 className="text-xl font-bold text-slate-900">Escala</h2>
         <p className="text-sm text-slate-500 mt-0.5">
