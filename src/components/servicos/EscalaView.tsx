@@ -1,6 +1,5 @@
 import { useState, type ElementType } from 'react'
 import {
-  ArrowLeft,
   CalendarDays,
   Clock,
   Route,
@@ -75,7 +74,7 @@ function generateDateCards(): DateCard[] {
   return result
 }
 
-export function EscalaView({ userName, onBack }: EscalaViewProps) {
+export function EscalaView({ userName }: EscalaViewProps) {
   const [items, setItems] = useState<EscalaItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -97,112 +96,8 @@ export function EscalaView({ userName, onBack }: EscalaViewProps) {
     }
   }
 
-  const handleBackToCards = () => {
-    setSelectedDate(null)
-    setItems([])
-    setError(null)
-  }
-
-  if (selectedDate) {
-    const card = dateCards.find((c) => c.dateStr === selectedDate)
-    return (
-      <div className="space-y-6 animate-fade-in">
-        <Button
-          variant="ghost"
-          onClick={handleBackToCards}
-          className="text-slate-600 hover:text-slate-900 -ml-2"
-        >
-          <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
-        </Button>
-
-        <div className="flex items-center gap-2 text-green-700">
-          <CalendarDays className="w-5 h-5" />
-          <h3 className="font-bold text-lg">
-            {card?.weekday} — {selectedDate}
-          </h3>
-        </div>
-
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
-            <span className="text-slate-500 text-sm">Carregando escala...</span>
-          </div>
-        )}
-
-        {error && !loading && (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="p-6 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-red-700 font-medium">{error}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 border-red-300 text-red-600 hover:bg-red-100"
-                  onClick={() => handleCardClick(selectedDate)}
-                >
-                  Tentar novamente
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {!loading && !error && items.length === 0 && (
-          <Card className="border-slate-200">
-            <CardContent className="p-10 flex flex-col items-center gap-3 text-center">
-              <CalendarDays className="w-10 h-10 text-slate-300" />
-              <p className="text-slate-500 font-medium">
-                Nenhuma escala encontrada. <br />
-                Verifique novamente mais tarde.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {!loading && !error && items.length > 0 && (
-          <div className="space-y-4 animate-fade-in-up">
-            {items.map((item, idx) => (
-              <Card
-                key={idx}
-                className="border-green-200 bg-gradient-to-br from-green-50/60 to-white overflow-hidden"
-              >
-                <CardContent className="p-0">
-                  <div className="flex items-center gap-2 px-6 py-3 bg-green-600/5 border-b border-green-100">
-                    <MapPin className="w-4 h-4 text-green-600" />
-                    <span className="text-sm font-semibold text-green-700">
-                      Escala {idx + 1} de {items.length}
-                    </span>
-                  </div>
-                  <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <DetailItem icon={CalendarDays} label="Data" value={item.data} />
-                    <DetailItem icon={Bus} label="Veículo" value={item.veiculo} />
-                    <DetailItem icon={Route} label="Linha" value={item.linha} />
-                    <DetailItem icon={Hash} label="Tabela" value={item.tabela} />
-                    <DetailItem icon={Clock} label="Início" value={item.inicio} />
-                    <DetailItem icon={Clock} label="Fim" value={item.fim} />
-                    <DetailItem icon={Footprints} label="Pegada" value={item.pegada} />
-                    <DetailItem icon={Navigation} label="Status" value="Escala atribuída" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
-      <Button
-        variant="ghost"
-        onClick={onBack}
-        className="text-slate-600 hover:text-slate-900 -ml-2"
-      >
-        <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
-      </Button>
-
       <div>
         <h2 className="text-xl font-bold text-slate-900">Escala</h2>
         <p className="text-sm text-slate-500 mt-0.5">
@@ -215,26 +110,115 @@ export function EscalaView({ userName, onBack }: EscalaViewProps) {
           <CalendarDays className="w-4 h-4 text-green-600" />
           Próximos dias
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {dateCards.map((card) => (
-            <Card
-              key={card.dateStr}
-              onClick={() => handleCardClick(card.dateStr)}
-              className={cn(
-                'cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
-                'border-slate-200 hover:border-green-400',
-              )}
-            >
-              <CardContent className="p-4 flex flex-col items-center gap-1">
-                <span className="text-xs font-medium text-green-600 uppercase tracking-wide">
-                  {card.weekday}
-                </span>
-                <span className="text-base font-bold text-slate-900">{card.dateStr}</span>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {dateCards.map((card) => {
+            const isSelected = selectedDate === card.dateStr
+            return (
+              <Card
+                key={card.dateStr}
+                onClick={() => handleCardClick(card.dateStr)}
+                className={cn(
+                  'cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
+                  isSelected
+                    ? 'border-green-500 bg-green-50 shadow-md ring-2 ring-green-500/20'
+                    : 'border-slate-200 hover:border-green-400',
+                )}
+              >
+                <CardContent className="p-4 flex flex-col items-center gap-1">
+                  <span
+                    className={cn(
+                      'text-xs font-medium uppercase tracking-wide',
+                      isSelected ? 'text-green-700' : 'text-green-600',
+                    )}
+                  >
+                    {card.weekday}
+                  </span>
+                  <span
+                    className={cn(
+                      'text-base font-bold',
+                      isSelected ? 'text-green-800' : 'text-slate-900',
+                    )}
+                  >
+                    {card.dayMonth}
+                  </span>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       </div>
+
+      {selectedDate && (
+        <div className="space-y-4 animate-fade-in-up">
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <Loader2 className="w-8 h-8 text-green-600 animate-spin" />
+              <span className="text-slate-500 text-sm">Carregando escala...</span>
+            </div>
+          )}
+
+          {error && !loading && (
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="p-6 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-red-700 font-medium">{error}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 border-red-300 text-red-600 hover:bg-red-100"
+                    onClick={() => handleCardClick(selectedDate)}
+                  >
+                    Tentar novamente
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {!loading && !error && items.length === 0 && (
+            <Card className="border-slate-200">
+              <CardContent className="p-10 flex flex-col items-center gap-3 text-center">
+                <CalendarDays className="w-10 h-10 text-slate-300" />
+                <p className="text-slate-500 font-medium">
+                  Nenhuma escala encontrada. <br />
+                  Verifique novamente mais tarde.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {!loading && !error && items.length > 0 && (
+            <div className="space-y-4">
+              {items.map((item, idx) => (
+                <Card
+                  key={idx}
+                  className="border-green-200 bg-gradient-to-br from-green-50/60 to-white overflow-hidden"
+                >
+                  <CardContent className="p-0">
+                    <div className="flex items-center gap-2 px-6 py-3 bg-green-600/5 border-b border-green-100">
+                      <MapPin className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-semibold text-green-700">
+                        Escala {idx + 1} de {items.length}
+                      </span>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <DetailItem icon={CalendarDays} label="Data" value={item.data} />
+                      <DetailItem icon={Bus} label="Veículo" value={item.veiculo} />
+                      <DetailItem icon={Route} label="Linha" value={item.linha} />
+                      <DetailItem icon={Hash} label="Tabela" value={item.tabela} />
+                      <DetailItem icon={Clock} label="Início" value={item.inicio} />
+                      <DetailItem icon={Clock} label="Fim" value={item.fim} />
+                      <DetailItem icon={Footprints} label="Pegada" value={item.pegada} />
+                      <DetailItem icon={Navigation} label="Status" value="Escala atribuída" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
