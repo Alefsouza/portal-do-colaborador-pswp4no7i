@@ -49,7 +49,8 @@ export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRe
     return res as TelemetryResponse
   } catch (err) {
     if (err instanceof ClientResponseError) {
-      const message = (err.response as { error?: string })?.error || err.message
+      const response = err.response as { error?: string; details?: Record<string, string> }
+      const message = response?.error || err.message
       throw new Error(message)
     }
     throw new Error('Erro ao buscar dados de telemetria')

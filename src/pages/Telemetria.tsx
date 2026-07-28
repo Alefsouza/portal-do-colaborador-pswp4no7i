@@ -90,6 +90,7 @@ export default function Telemetria() {
   const [results, setResults] = useState<TelemetryResponse | null>(null)
   const [hasConsulted, setHasConsulted] = useState(false)
   const [error, setError] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string>('')
   const [driverId, setDriverId] = useState<string>('')
 
   useEffect(() => {
@@ -120,6 +121,7 @@ export default function Telemetria() {
     if (!isValid || !dataInicial || !dataFinal) return
     setLoading(true)
     setError(false)
+    setErrorMessage('')
     setResults(null)
     try {
       const data = await fetchTelemetry({
@@ -129,8 +131,11 @@ export default function Telemetria() {
       })
       setResults(data)
       setHasConsulted(true)
-    } catch {
+    } catch (err) {
       setError(true)
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Não foi possível carregar os dados de telemetria.',
+      )
     } finally {
       setLoading(false)
     }
@@ -204,7 +209,8 @@ export default function Telemetria() {
           <AlertCircle className="w-5 h-5" />
           <AlertTitle>Erro</AlertTitle>
           <AlertDescription>
-            Não foi possível carregar os dados de telemetria. Tente novamente em instantes.
+            {errorMessage ||
+              'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.'}
           </AlertDescription>
         </Alert>
       )}
