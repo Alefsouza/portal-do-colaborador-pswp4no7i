@@ -1,70 +1,66 @@
 routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
-  const authHeader = e.requestInfo().headers['authorization'] || ''
-  const authToken = authHeader.replace(/^Bearer\s+/i, '').trim()
-
-  if (!authToken) {
+  var authHeader = e.requestInfo().headers['authorization'] || ''
+  if (!authHeader.replace(/^Bearer\s+/i, '').trim()) {
     return e.json(401, { error: 'Token não fornecido.' })
   }
 
-  const body = e.requestInfo().body || {}
-  const dataInicial = (body.data_inicial || '').trim()
-  const dataFinal = (body.data_final || '').trim()
-  let driverId = (body.driver_id || '').trim()
+  var body = e.requestInfo().body || {}
+  var dataInicial = (body.data_inicial || '').trim()
+  var dataFinal = (body.data_final || '').trim()
+  var workerIdRaw = (body.worker_id || '').trim()
 
-  if (!dataInicial || !dataFinal) {
-    var fieldErrors = {}
-    if (!dataInicial) fieldErrors['data_inicial'] = 'Data inicial é obrigatória'
-    if (!dataFinal) fieldErrors['data_final'] = 'Data final é obrigatória'
-    return e.json(400, { error: 'Campos obrigatórios não fornecidos', details: fieldErrors })
+  if (!dataInicial || !dataFinal || !workerIdRaw) {
+    return e.json(400, { error: 'Parâmetros obrigatórios: data_inicial, data_final e worker_id.' })
   }
 
-  if (!driverId) {
-    return e.json(400, { error: 'driver_id é obrigatório' })
-  }
-
-  driverId = driverId.replace(/^0+/, '')
-  if (!driverId) {
-    return e.json(400, { error: 'driver_id inválido após normalização' })
+  var workerId = parseInt(workerIdRaw, 10)
+  if (isNaN(workerId) || workerId <= 0) {
+    return e.json(400, { error: 'worker_id inválido' })
   }
 
   var dateRegex = /^\d{4}-\d{2}-\d{2}$/
   if (!dateRegex.test(dataInicial) || !dateRegex.test(dataFinal)) {
-    return e.json(400, { error: 'Formato de data inválido. Use YYYY-MM-DD.' })
+    return e.json(400, { error: 'Datas inválidas. Use o formato YYYY-MM-DD.' })
   }
 
-  var initDate = new Date(dataInicial + 'T00:00:00')
-  var finDate = new Date(dataFinal + 'T23:59:59')
-  if (isNaN(initDate.getTime()) || isNaN(finDate.getTime())) {
-    return e.json(400, { error: 'Data inválida.' })
+  var parsedInicial = new Date(dataInicial + 'T00:00:00')
+  var parsedFinal = new Date(dataFinal + 'T23:59:59')
+  if (isNaN(parsedInicial.getTime()) || isNaN(parsedFinal.getTime())) {
+    return e.json(400, { error: 'Datas inválidas. Use o formato YYYY-MM-DD.' })
   }
-  if (initDate > finDate) {
+
+  if (parsedInicial > parsedFinal) {
     return e.json(400, { error: 'Data inicial deve ser anterior ou igual à data final.' })
   }
 
-  var driverField = $secrets.get('DATALBUS_DRIVER_FIELD') || 'registro'
-
-  if (driverField === 'cpf') {
-    var cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
-    if (!cpfRegex.test(driverId)) {
-      return e.json(400, {
-        error:
-          'driver_id inválido para o campo CPF. Esperado formato 000.000.000-00 ou apenas dígitos.',
-      })
-    }
-  } else if (driverField === 'registro') {
-    if (driverId.length < 1) {
-      return e.json(400, {
-        error: 'driver_id inválido para o campo registro.',
-      })
-    }
+  var diffMs = parsedFinal.getTime() - parsedInicial.getTime()
+  var diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays > 31) {
+    return e.json(400, {
+      error: 'O período máximo permitido é de 31 dias. Selecione um intervalo menor.',
+    })
   }
 
   var datalbusEmail = $secrets.get('DATALBUS_EMAIL') || ''
   var datalbusPassword = $secrets.get('DATALBUS_PASSWORD') || ''
+  var datalbusTenancy = $secrets.get('DATALBUS_TENANCY') || ''
 
-  if (!datalbusEmail || !datalbusPassword) {
-    $app.logger().error('Datalbus credentials not configured', 'email_present', !!datalbusEmail)
-    return e.json(503, { error: 'Credenciais do DataBus não configuradas.' })
+  if (!datalbusEmail || !datalbusPassword || !datalbusTenancy) {
+    $app
+      .logger()
+      .error(
+        'Datalbus credentials not configured',
+        'email_present',
+        !!datalbusEmail,
+        'password_present',
+        !!datalbusPassword,
+        'tenancy_present',
+        !!datalbusTenancy,
+      )
+    return e.json(500, {
+      error:
+        'Credenciais do DataBus não configuradas. Verifique DATALBUS_EMAIL, DATALBUS_PASSWORD e DATALBUS_TENANCY.',
+    })
   }
 
   try {
@@ -74,9 +70,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
         'CREATE TABLE IF NOT EXISTS _datalbus_cache (id TEXT PRIMARY KEY, token TEXT, expires INTEGER)',
       )
       .execute()
-  } catch (cacheErr) {
-    $app.logger().warn('Datalbus cache table creation failed', 'message', String(cacheErr))
-  }
+  } catch (_) {}
 
   function getCachedToken() {
     try {
@@ -85,18 +79,8 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
         .db()
         .newQuery("SELECT token, expires FROM _datalbus_cache WHERE id = 'session' LIMIT 1")
         .one(row)
-      if (row.token && Date.now() < row.expires) {
-        $app
-          .logger()
-          .info('Datalbus: using cached token', 'expires_in_ms', row.expires - Date.now())
-        return row.token
-      }
-      if (row.token) {
-        $app.logger().info('Datalbus: cached token expired, will re-authenticate')
-      }
-    } catch (cacheErr) {
-      $app.logger().warn('Datalbus: failed to read cached token', 'message', String(cacheErr))
-    }
+      if (row.token && Date.now() < row.expires) return row.token
+    } catch (_) {}
     return ''
   }
 
@@ -109,17 +93,13 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
         )
         .bind({ token: tokenStr, expires: Date.now() + 3600000 })
         .execute()
-    } catch (cacheErr) {
-      $app.logger().warn('Datalbus: failed to save cached token', 'message', String(cacheErr))
-    }
+    } catch (_) {}
   }
 
   function clearCachedToken() {
     try {
       $app.db().newQuery("DELETE FROM _datalbus_cache WHERE id = 'session'").execute()
-    } catch (cacheErr) {
-      $app.logger().warn('Datalbus: failed to clear cached token', 'message', String(cacheErr))
-    }
+    } catch (_) {}
   }
 
   function authenticateDatalbus() {
@@ -128,149 +108,63 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
       authRes = $http.send({
         url: 'https://datalbus.com.br:8000/api/v2/login',
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Tenancy': datalbusTenancy },
         body: JSON.stringify({ email: datalbusEmail, password: datalbusPassword }),
         timeout: 15,
       })
     } catch (err) {
-      $app
-        .logger()
-        .error('Datalbus auth transport error', 'message', err.message, 'stack', String(err))
+      $app.logger().error('Datalbus auth transport error', 'message', err.message)
       return ''
     }
-
     if (authRes.statusCode !== 200) {
-      var authBody = ''
-      try {
-        authBody = JSON.stringify(authRes.json)
-      } catch (_) {
-        authBody = String(authRes.body || '')
-      }
-      $app
-        .logger()
-        .error('Datalbus auth failed', 'statusCode', authRes.statusCode, 'body', authBody)
+      $app.logger().error('Datalbus auth failed', 'statusCode', authRes.statusCode)
       return ''
     }
-
     var token = ''
     try {
-      var jsonData = authRes.json
-      if (jsonData) {
-        if (typeof jsonData.token === 'string') token = jsonData.token
-        else if (typeof jsonData.access_token === 'string') token = jsonData.access_token
-        else if (typeof jsonData.jwt === 'string') token = jsonData.jwt
-        else if (jsonData.data && typeof jsonData.data.token === 'string')
-          token = jsonData.data.token
-        else if (jsonData.data && typeof jsonData.data.access_token === 'string')
-          token = jsonData.data.access_token
+      var j = authRes.json
+      if (j) {
+        if (typeof j.token === 'string') token = j.token
+        else if (typeof j.access_token === 'string') token = j.access_token
+        else if (typeof j.jwt === 'string') token = j.jwt
+        else if (j.data && typeof j.data.token === 'string') token = j.data.token
+        else if (j.data && typeof j.data.access_token === 'string') token = j.data.access_token
       }
-    } catch (parseErr) {
-      $app
-        .logger()
-        .error(
-          'Datalbus auth: failed to parse response JSON',
-          'message',
-          String(parseErr),
-          'body',
-          String(authRes.body || ''),
-        )
-      return ''
-    }
-
-    if (!token) {
-      $app
-        .logger()
-        .error('Datalbus auth: no token found in response', 'body', String(authRes.body || ''))
-      return ''
-    }
-
-    saveCachedToken(token)
-    $app.logger().info('Datalbus auth success, token cached', 'tokenLength', token.length)
+    } catch (_) {}
+    if (token) saveCachedToken(token)
     return token
   }
 
-  function datalbusGet(url, token, label) {
+  function fetchScore(token) {
+    var url =
+      'https://datalbus.com.br:8000/api/v2/drivers/score?dtIni=' +
+      encodeURIComponent(dataInicial) +
+      '&dtFin=' +
+      encodeURIComponent(dataFinal) +
+      '&workerId[]=' +
+      workerId
     try {
       var res = $http.send({
         url: url,
         method: 'GET',
-        headers: { Authorization: 'Bearer ' + token },
+        headers: {
+          Authorization: 'Bearer ' + token,
+          'X-Tenancy': datalbusTenancy,
+          Accept: 'application/json',
+        },
         timeout: 30,
       })
-
-      if (res.statusCode !== 200) {
-        var errBody = ''
-        try {
-          errBody = JSON.stringify(res.json)
-        } catch (_) {
-          errBody = String(res.body || '')
-        }
-        $app
-          .logger()
-          .error(
-            'Datalbus GET failed',
-            'label',
-            label,
-            'url',
-            url,
-            'statusCode',
-            res.statusCode,
-            'body',
-            errBody,
-          )
-      }
-
-      var parsedJson = null
+      var parsed = null
       if (res.statusCode === 200 && res.body) {
         try {
-          parsedJson = res.json
-        } catch (parseErr) {
-          $app
-            .logger()
-            .error(
-              'Datalbus GET: failed to parse JSON response',
-              'label',
-              label,
-              'url',
-              url,
-              'message',
-              String(parseErr),
-              'bodyPreview',
-              String(res.body || '').substring(0, 500),
-            )
-          return { statusCode: res.statusCode, json: null, parseError: true }
-        }
+          parsed = res.json
+        } catch (_) {}
       }
-
-      return { statusCode: res.statusCode, json: parsedJson, parseError: false }
+      return { statusCode: res.statusCode, json: parsed, body: String(res.body || '') }
     } catch (err) {
-      $app
-        .logger()
-        .error('Datalbus GET transport error', 'label', label, 'url', url, 'message', err.message)
-      return { statusCode: 0, json: null, parseError: false }
+      $app.logger().error('Datalbus score fetch transport error', 'message', err.message)
+      return { statusCode: 0, json: null, body: '' }
     }
-  }
-
-  function datalbusGetWithReauth(url, token, label) {
-    var result = datalbusGet(url, token, label)
-
-    if (result.statusCode === 401) {
-      $app.logger().info('Datalbus: 401 received, reauthenticating', 'label', label)
-      clearCachedToken()
-      var newToken = authenticateDatalbus()
-      if (newToken) {
-        $app.logger().info('Datalbus: reauth success, retrying request', 'label', label)
-        result = datalbusGet(url, newToken, label + ' (retry)')
-        if (result.statusCode === 401) {
-          $app.logger().error('Datalbus: still 401 after reauth', 'label', label)
-        }
-      } else {
-        $app.logger().error('Datalbus: reauth failed, cannot retry', 'label', label)
-        return { statusCode: 0, json: null, parseError: false, reauthFailed: true }
-      }
-    }
-
-    return result
   }
 
   var datalbusToken = getCachedToken()
@@ -278,141 +172,116 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     datalbusToken = authenticateDatalbus()
     if (!datalbusToken) {
       return e.json(502, {
-        error: 'Falha ao autenticar na API DataBus. Verifique as credenciais configuradas.',
+        error: 'Erro de autenticação com a API DataBus. Tente novamente em instantes.',
       })
     }
   }
 
-  var startTime = dataInicial + 'T00:00:00'
-  var endTime = dataFinal + 'T23:59:59'
-  var driverParam = encodeURIComponent(driverField) + '=' + encodeURIComponent(driverId)
+  var scoreRes = fetchScore(datalbusToken)
 
-  var tripEventsUrl =
-    'https://datalbus.com.br:8000/api/v2/trip-events-filtered?start_time=' +
-    encodeURIComponent(startTime) +
-    '&end_time=' +
-    encodeURIComponent(endTime) +
-    '&' +
-    driverParam
-  var scoreUrl =
-    'https://datalbus.com.br:8000/api/v2/drivers-score?start_time=' +
-    encodeURIComponent(startTime) +
-    '&end_time=' +
-    encodeURIComponent(endTime) +
-    '&' +
-    driverParam
-
-  $app
-    .logger()
-    .info(
-      'Datalbus: querying telemetry',
-      'driverField',
-      driverField,
-      'driverId',
-      driverId,
-      'dataInicial',
-      dataInicial,
-      'dataFinal',
-      dataFinal,
-    )
-
-  var tripEventsRes = datalbusGetWithReauth(tripEventsUrl, datalbusToken, 'trip-events-filtered')
-
-  if (tripEventsRes.reauthFailed) {
-    return e.json(502, { error: 'Falha ao autenticar na API DataBus durante consulta de eventos.' })
-  }
-
-  if (tripEventsRes.parseError) {
-    return e.json(502, {
-      error:
-        'Falha ao processar resposta de eventos da API DataBus. Resposta não é um JSON válido.',
-    })
-  }
-
-  var scoreRes = datalbusGetWithReauth(scoreUrl, datalbusToken, 'drivers-score')
-
-  if (scoreRes.reauthFailed) {
-    return e.json(502, {
-      error: 'Falha ao autenticar na API DataBus durante consulta de pontuação.',
-    })
-  }
-
-  if (scoreRes.parseError) {
-    return e.json(502, {
-      error:
-        'Falha ao processar resposta de pontuação da API DataBus. Resposta não é um JSON válido.',
-    })
-  }
-
-  if (tripEventsRes.statusCode === 0 && scoreRes.statusCode === 0) {
+  if (scoreRes.statusCode === 401) {
     clearCachedToken()
+    datalbusToken = authenticateDatalbus()
+    if (!datalbusToken) {
+      return e.json(502, {
+        error: 'Erro de autenticação com a API DataBus. Tente novamente em instantes.',
+      })
+    }
+    scoreRes = fetchScore(datalbusToken)
+    if (scoreRes.statusCode === 401) {
+      return e.json(502, {
+        error: 'Erro de autenticação com a API DataBus. Tente novamente em instantes.',
+      })
+    }
+  }
+
+  if (scoreRes.statusCode === 0) {
+    return e.json(502, { error: 'Falha de comunicação com a API DataBus.' })
+  }
+  if (scoreRes.statusCode !== 200) {
+    var errMsg = 'Falha ao buscar dados do DataBus.'
+    var errBody = scoreRes.body || ''
+    var errJson = null
+    try {
+      errJson = scoreRes.json || (errBody ? JSON.parse(errBody) : null)
+    } catch (_) {}
+    $app
+      .logger()
+      .error(
+        'Datalbus API error response',
+        'dataBusStatus',
+        scoreRes.statusCode,
+        'dataBusBody',
+        errBody,
+        'dataBusJson',
+        errJson ? JSON.stringify(errJson) : 'null',
+      )
     return e.json(502, {
-      error: 'Falha de comunicação com a API DataBus. Nenhuma resposta recebida dos endpoints.',
+      error: errMsg,
+      details: {
+        dataBusStatus: scoreRes.statusCode,
+        dataBusBody: errBody,
+      },
     })
   }
 
-  if (tripEventsRes.statusCode !== 200 && scoreRes.statusCode !== 200) {
-    clearCachedToken()
-    var failMsg = 'Falha ao buscar dados do DataBus. '
-    if (tripEventsRes.statusCode !== 0) {
-      failMsg += 'Eventos: HTTP ' + tripEventsRes.statusCode + '. '
-    }
-    if (scoreRes.statusCode !== 0) {
-      failMsg += 'Pontuação: HTTP ' + scoreRes.statusCode + '.'
-    }
-    return e.json(502, { error: failMsg.trim() })
+  var rawData = scoreRes.json || {}
+  var eventList = []
+  if (Array.isArray(rawData)) {
+    eventList = rawData
+  } else if (rawData) {
+    if (Array.isArray(rawData.events)) eventList = rawData.events
+    else if (Array.isArray(rawData.eventos)) eventList = rawData.eventos
+    else if (Array.isArray(rawData.data)) eventList = rawData.data
+    else if (Array.isArray(rawData.items)) eventList = rawData.items
+    else if (rawData.results && Array.isArray(rawData.results)) eventList = rawData.results
+    else if (rawData.score_events && Array.isArray(rawData.score_events))
+      eventList = rawData.score_events
   }
 
   var eventos = []
-  if (tripEventsRes.statusCode === 200 && tripEventsRes.json) {
-    var tripData = tripEventsRes.json
-    var eventList = []
-    if (Array.isArray(tripData)) {
-      eventList = tripData
-    } else if (tripData) {
-      if (Array.isArray(tripData.events)) eventList = tripData.events
-      else if (Array.isArray(tripData.data)) eventList = tripData.data
-      else if (Array.isArray(tripData.items)) eventList = tripData.items
-      else if (tripData.results && Array.isArray(tripData.results)) eventList = tripData.results
-      else if (tripData.trip_events && Array.isArray(tripData.trip_events))
-        eventList = tripData.trip_events
-    }
-
-    for (var i = 0; i < eventList.length; i++) {
-      var ev = eventList[i]
-      eventos.push({
-        data: String(
-          ev.data ||
-            ev.date_time ||
-            ev.timestamp ||
-            ev.created_at ||
-            ev.datetime ||
-            ev.start_time ||
-            '',
-        ),
-        tipo: String(ev.tipo || ev.type || ev.event_type || ev.event || ev.event_name || ''),
-        localizacao: String(
-          ev.localizacao || ev.location || ev.address || ev.local || ev.place || '',
-        ),
-        veiculo: String(
-          ev.veiculo || ev.vehicle || ev.plate || ev.placa || ev.bus || ev.vehicle_plate || '',
-        ),
-        gravidade: String(
-          ev.gravidade || ev.severity || ev.gravity || ev.level || ev.priority || '',
-        ),
-      })
-    }
-  }
-
-  var pontuacao = {}
-  if (scoreRes.statusCode === 200 && scoreRes.json) {
-    if (Array.isArray(scoreRes.json) && scoreRes.json.length > 0) {
-      pontuacao = scoreRes.json[0]
-    } else if (!Array.isArray(scoreRes.json)) {
-      pontuacao = scoreRes.json
-    } else {
-      pontuacao = { items: scoreRes.json }
-    }
+  for (var i = 0; i < eventList.length; i++) {
+    var ev = eventList[i]
+    eventos.push({
+      data: String(
+        ev.data ||
+          ev.date_time ||
+          ev.timestamp ||
+          ev.created_at ||
+          ev.datetime ||
+          ev.data_hora ||
+          '',
+      ),
+      tipo: String(
+        ev.tipo ||
+          ev.type ||
+          ev.event_type ||
+          ev.event ||
+          ev.event_name ||
+          ev.descricao_evento ||
+          '',
+      ),
+      veiculo: String(
+        ev.veiculo ||
+          ev.vehicle ||
+          ev.plate ||
+          ev.placa ||
+          ev.bus ||
+          ev.vehicle_plate ||
+          ev.prefixo ||
+          '',
+      ),
+      descricao: String(
+        ev.descricao ||
+          ev.description ||
+          ev.localizacao ||
+          ev.location ||
+          ev.address ||
+          ev.local ||
+          ev.place ||
+          '',
+      ),
+    })
   }
 
   var resumo = {}
@@ -427,17 +296,15 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
   $app
     .logger()
     .info(
-      'Datalbus: telemetry query success',
+      'Datalbus: telemetry success',
       'eventosCount',
       eventos.length,
       'resumoKeys',
       Object.keys(resumo).length,
-      'hasScore',
-      Object.keys(pontuacao).length > 0,
     )
 
   return e.json(200, {
-    pontuacao: pontuacao,
+    pontuacao: rawData,
     eventos: eventos,
     resumo: resumo,
   })

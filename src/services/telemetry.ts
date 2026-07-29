@@ -4,9 +4,8 @@ import pb from '@/lib/pocketbase/client'
 export interface TelemetryEvent {
   data: string
   tipo: string
-  localizacao: string
   veiculo: string
-  gravidade: string
+  descricao: string
 }
 
 export interface TelemetryScore {
@@ -20,7 +19,7 @@ export interface TelemetryScore {
   [key: string]: unknown
 }
 
-export interface TelemetryResponse {
+export interface TelemetryRecord {
   pontuacao: TelemetryScore
   eventos: TelemetryEvent[]
   resumo: Record<string, number>
@@ -29,30 +28,38 @@ export interface TelemetryResponse {
 export interface TelemetryQuery {
   dataInicial: string
   dataFinal: string
-  driverId: string
+  workerId: string
 }
 
-export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryResponse> {
+export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRecord> {
   try {
     const res = await pb.send('/backend/v1/datalbus/telemetria', {
       method: 'POST',
       body: JSON.stringify({
         data_inicial: query.dataInicial,
         data_final: query.dataFinal,
-        driver_id: query.driverId,
+        worker_id: query.workerId,
       }),
       headers: {
         'Content-Type': 'application/json',
         ...(pb.authStore.token ? { Authorization: pb.authStore.token } : {}),
       },
     })
-    return res as TelemetryResponse
+    return res as TelemetryRecord
   } catch (err) {
     if (err instanceof ClientResponseError) {
-      const response = err.response as { error?: string; details?: Record<string, string> }
-      const message = response?.error || err.message
-      throw new Error(message)
+      const response = err.response as {
+        error?: string
+      }
+      if (response?.error) {
+        throw new Error(response.error)
+      }
+      throw new Error(
+        'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.',
+      )
     }
-    throw new Error('Erro ao buscar dados de telemetria')
+    throw new Error(
+      'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.',
+    )
   }
 }

@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { fetchTelemetry, type TelemetryResponse, type TelemetryScore } from '@/services/telemetry'
+import { fetchTelemetry, type TelemetryRecord, type TelemetryScore } from '@/services/telemetry'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
 
@@ -67,6 +67,7 @@ function getEventBadgeClass(tipo: string): string {
     return 'bg-orange-100 text-orange-700 border-orange-200'
   if (l.includes('acelera')) return 'bg-yellow-100 text-yellow-700 border-yellow-200'
   if (l.includes('celular')) return 'bg-purple-100 text-purple-700 border-purple-200'
+  if (l.includes('curva')) return 'bg-blue-100 text-blue-700 border-blue-200'
   return 'bg-slate-100 text-slate-700 border-slate-200'
 }
 
@@ -79,19 +80,29 @@ function formatCounter(tipo: string, count: number): string {
   if (l.includes('acelera'))
     return `${count} ${count === 1 ? 'Aceleração' : 'Acelerações'} brusca${count === 1 ? '' : 's'}`
   if (l.includes('celular')) return `${count} ${count === 1 ? 'Uso' : 'Usos'} de celular`
+  if (l.includes('curva'))
+    return `${count} ${count === 1 ? 'Curva' : 'Curvas'} perigosa${count === 1 ? '' : 's'}`
   return `${count} ${tipo}`
 }
+
+const KNOWN_EVENT_TYPES = [
+  'Excesso de Velocidade',
+  'Freada Brusca',
+  'Aceleração Brusca',
+  'Curva Perigosa',
+  'Uso de Celular',
+]
 
 export default function Telemetria() {
   const { user } = useAuth()
   const [dataInicial, setDataInicial] = useState<Date | undefined>(undefined)
   const [dataFinal, setDataFinal] = useState<Date | undefined>(undefined)
   const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<TelemetryResponse | null>(null)
+  const [results, setResults] = useState<TelemetryRecord | null>(null)
   const [hasConsulted, setHasConsulted] = useState(false)
   const [error, setError] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string>('')
-  const [driverId, setDriverId] = useState<string>('')
+  const [workerId, setWorkerId] = useState<string>('')
 
   useEffect(() => {
     if (!user?.id) return
@@ -99,22 +110,29 @@ export default function Telemetria() {
       .getOne(user.id)
       .then((record) => {
         const reg = (record as Record<string, unknown>).registro as string
-        const cpf = (record as Record<string, unknown>).cpf as string
-        setDriverId(reg || cpf || '')
+        if (reg) {
+          setWorkerId(String(parseInt(reg, 10)))
+        }
       })
       .catch(() => {})
   }, [user?.id])
 
   const isValid = useMemo(() => {
     if (!dataInicial || !dataFinal) return false
-    if (!driverId) return false
+    if (!workerId) return false
     return dataInicial <= dataFinal
-  }, [dataInicial, dataFinal, driverId])
+  }, [dataInicial, dataFinal, workerId])
 
   const score = useMemo(() => extractScore(results?.pontuacao), [results])
   const sortedEvents = useMemo(() => {
     if (!results?.eventos) return []
     return [...results.eventos].sort((a, b) => (b.data || '').localeCompare(a.data || ''))
+  }, [results])
+
+  const allResumoKeys = useMemo(() => {
+    const keys = Object.keys(results?.resumo || {})
+    const known = KNOWN_EVENT_TYPES.filter((k) => !keys.includes(k))
+    return [...keys, ...known]
   }, [results])
 
   const handleConsult = async () => {
@@ -127,15 +145,19 @@ export default function Telemetria() {
       const data = await fetchTelemetry({
         dataInicial: toDateStr(dataInicial),
         dataFinal: toDateStr(dataFinal),
-        driverId,
+        workerId,
       })
       setResults(data)
       setHasConsulted(true)
     } catch (err) {
       setError(true)
-      setErrorMessage(
-        err instanceof Error ? err.message : 'Não foi possível carregar os dados de telemetria.',
-      )
+      const fallback =
+        'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.'
+      if (err instanceof Error && err.message) {
+        setErrorMessage(err.message)
+      } else {
+        setErrorMessage(fallback)
+      }
     } finally {
       setLoading(false)
     }
@@ -246,15 +268,15 @@ export default function Telemetria() {
             </Card>
           )}
 
-          {Object.keys(results.resumo).length > 0 && (
+          {allResumoKeys.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {Object.entries(results.resumo).map(([tipo, count]) => (
+              {allResumoKeys.map((tipo) => (
                 <Badge
                   key={tipo}
                   variant="outline"
                   className={cn('px-3 py-1.5 text-sm font-medium', getEventBadgeClass(tipo))}
                 >
-                  {formatCounter(tipo, count)}
+                  {formatCounter(tipo, results.resumo[tipo] || 0)}
                 </Badge>
               ))}
             </div>
@@ -305,10 +327,7 @@ export default function Telemetria() {
                           <TableCell className="text-slate-600 whitespace-nowrap">
                             {event.veiculo || '-'}
                           </TableCell>
-                          <TableCell className="text-slate-600">
-                            {[event.localizacao, event.gravidade].filter(Boolean).join(' — ') ||
-                              '-'}
-                          </TableCell>
+                          <TableCell className="text-slate-600">{event.descricao || '-'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
