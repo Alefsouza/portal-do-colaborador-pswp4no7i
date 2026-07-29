@@ -36,6 +36,16 @@ function formatEventDate(dateStr: string): string {
   return `${d}/${m}/${y} ${time}`
 }
 
+function formatDuration(duracao: number | string | undefined): string {
+  if (duracao === undefined || duracao === null || duracao === '') return '-'
+  const seconds = typeof duracao === 'string' ? parseInt(duracao, 10) : duracao
+  if (isNaN(seconds) || seconds <= 0) return '-'
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+}
+
 function extractScore(p: TelemetryScore | null | undefined): number | null {
   if (!p || typeof p !== 'object') return null
   const keys = ['score', 'pontuacao', 'total', 'valor', 'nota', 'overall_score', 'total_score']
@@ -44,6 +54,37 @@ function extractScore(p: TelemetryScore | null | undefined): number | null {
   }
   for (const v of Object.values(p)) {
     if (typeof v === 'number' && v >= 0 && v <= 100) return v
+  }
+  return null
+}
+
+function extractDistance(p: TelemetryScore | null | undefined): number | null {
+  if (!p || typeof p !== 'object') return null
+  const keys = [
+    'distance',
+    'distancia',
+    'km',
+    'total_distance',
+    'km_rodado',
+    'total_km',
+    'kilometers',
+  ]
+  for (const k of keys) {
+    const v = p[k]
+    if (typeof v === 'number' && v > 0) return v
+    if (typeof v === 'string') {
+      const parsed = parseFloat(v)
+      if (!isNaN(parsed) && parsed > 0) return parsed
+    }
+  }
+  for (const nestedKey of ['metricas', 'totais', 'data']) {
+    const nested = p[nestedKey]
+    if (nested && typeof nested === 'object') {
+      for (const k of keys) {
+        const v = (nested as Record<string, unknown>)[k]
+        if (typeof v === 'number' && v > 0) return v
+      }
+    }
   }
   return null
 }
@@ -67,7 +108,8 @@ function getEventBadgeClass(tipo: string): string {
     return 'bg-orange-100 text-orange-700 border-orange-200'
   if (l.includes('acelera')) return 'bg-yellow-100 text-yellow-700 border-yellow-200'
   if (l.includes('celular')) return 'bg-purple-100 text-purple-700 border-purple-200'
-  if (l.includes('curva')) return 'bg-blue-100 text-blue-700 border-blue-200'
+  if (l.includes('curva') || l.includes('desconforto'))
+    return 'bg-blue-100 text-blue-700 border-blue-200'
   return 'bg-slate-100 text-slate-700 border-slate-200'
 }
 
@@ -80,17 +122,18 @@ function formatCounter(tipo: string, count: number): string {
   if (l.includes('acelera'))
     return `${count} ${count === 1 ? 'Aceleração' : 'Acelerações'} brusca${count === 1 ? '' : 's'}`
   if (l.includes('celular')) return `${count} ${count === 1 ? 'Uso' : 'Usos'} de celular`
-  if (l.includes('curva'))
-    return `${count} ${count === 1 ? 'Curva' : 'Curvas'} perigosa${count === 1 ? '' : 's'}`
+  if (l.includes('curva') || l.includes('desconforto'))
+    return `${count} ${count === 1 ? 'Desconforto' : 'Desconfortos'} em curva`
   return `${count} ${tipo}`
 }
 
 const KNOWN_EVENT_TYPES = [
-  'Excesso de Velocidade',
-  'Freada Brusca',
-  'Aceleração Brusca',
-  'Curva Perigosa',
-  'Uso de Celular',
+  'Desconforto em curva',
+  'Excesso de velocidade',
+  'Freada brusca',
+  'Aceleração brusca',
+  'Curva perigosa',
+  'Uso de celular',
 ]
 
 export default function Telemetria() {
@@ -124,6 +167,7 @@ export default function Telemetria() {
   }, [dataInicial, dataFinal, workerId])
 
   const score = useMemo(() => extractScore(results?.pontuacao), [results])
+  const distance = useMemo(() => extractDistance(results?.pontuacao), [results])
   const sortedEvents = useMemo(() => {
     if (!results?.eventos) return []
     return [...results.eventos].sort((a, b) => (b.data || '').localeCompare(a.data || ''))
@@ -262,6 +306,14 @@ export default function Telemetria() {
                       {sortedEvents.length === 1 ? 'evento registrado' : 'eventos registrados'} no
                       período
                     </p>
+                    {distance !== null && (
+                      <p className="text-sm text-slate-500">
+                        Distância:{' '}
+                        <span className="font-semibold text-slate-700">
+                          {distance.toFixed(1)} km
+                        </span>
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -296,9 +348,9 @@ export default function Telemetria() {
                     <TableHeader>
                       <TableRow className="bg-primary/5 hover:bg-primary/5">
                         <TableHead className="font-bold text-primary">Data/Hora</TableHead>
-                        <TableHead className="font-bold text-primary">Tipo</TableHead>
+                        <TableHead className="font-bold text-primary">Tipo do Evento</TableHead>
                         <TableHead className="font-bold text-primary">Veículo</TableHead>
-                        <TableHead className="font-bold text-primary">Descrição</TableHead>
+                        <TableHead className="font-bold text-primary">Duração</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -327,7 +379,9 @@ export default function Telemetria() {
                           <TableCell className="text-slate-600 whitespace-nowrap">
                             {event.veiculo || '-'}
                           </TableCell>
-                          <TableCell className="text-slate-600">{event.descricao || '-'}</TableCell>
+                          <TableCell className="text-slate-600 whitespace-nowrap">
+                            {formatDuration(event.duracao)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

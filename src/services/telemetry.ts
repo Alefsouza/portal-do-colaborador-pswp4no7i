@@ -6,6 +6,9 @@ export interface TelemetryEvent {
   tipo: string
   veiculo: string
   descricao: string
+  duracao: number | string
+  latitude: number | string
+  longitude: number | string
 }
 
 export interface TelemetryScore {
@@ -16,6 +19,10 @@ export interface TelemetryScore {
   nota?: number
   overall_score?: number
   total_score?: number
+  distance?: number
+  distancia?: number
+  metricas?: Record<string, unknown>
+  totais?: Record<string, unknown>
   [key: string]: unknown
 }
 
@@ -48,9 +55,7 @@ export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRe
     return res as TelemetryRecord
   } catch (err) {
     if (err instanceof ClientResponseError) {
-      const response = err.response as {
-        error?: string
-      }
+      const response = err.response as { error?: string }
       if (response?.error) {
         throw new Error(response.error)
       }
