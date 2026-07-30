@@ -1,4 +1,9 @@
 routerAdd('POST', '/backend/v1/olho-vivo/buscar-veiculo', (e) => {
+  var corsOrigin = e.request.header.get('Origin') || '*'
+  e.response.header().set('Access-Control-Allow-Origin', corsOrigin)
+  e.response.header().set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  e.response.header().set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
   const authHeader = e.requestInfo().headers['authorization'] || ''
   const authToken = authHeader.replace(/^Bearer\s+/i, '').trim()
 

@@ -1,4 +1,9 @@
 routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
+  var corsOrigin = e.request.header.get('Origin') || '*'
+  e.response.header().set('Access-Control-Allow-Origin', corsOrigin)
+  e.response.header().set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  e.response.header().set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
   var authHeader = e.requestInfo().headers['authorization'] || ''
   if (!authHeader.replace(/^Bearer\s+/i, '').trim()) {
     return e.json(401, { error: 'Token não fornecido.' })
