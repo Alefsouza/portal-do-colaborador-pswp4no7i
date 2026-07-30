@@ -46,18 +46,17 @@ export interface TelemetryQuery {
   workerId: string
 }
 
+const FALLBACK_MESSAGE =
+  'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.'
+
 export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRecord> {
   try {
     const res = await pb.send('/backend/v1/datalbus/telemetria', {
       method: 'POST',
-      body: JSON.stringify({
+      body: {
         data_inicial: query.dataInicial,
         data_final: query.dataFinal,
         worker_id: query.workerId,
-      }),
-      headers: {
-        'Content-Type': 'application/json',
-        ...(pb.authStore.token ? { Authorization: pb.authStore.token } : {}),
       },
     })
     return res as TelemetryRecord
@@ -67,12 +66,10 @@ export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRe
       if (response?.error) {
         throw new Error(response.error)
       }
-      throw new Error(
-        'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.',
-      )
+      if (err.status === 0 || err.isAbort) {
+        throw new Error(FALLBACK_MESSAGE)
+      }
     }
-    throw new Error(
-      'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.',
-    )
+    throw new Error(FALLBACK_MESSAGE)
   }
 }

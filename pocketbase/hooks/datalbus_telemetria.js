@@ -345,161 +345,168 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     return apiGet(url, token)
   }
 
-  var datalbusToken = getCachedToken()
-  if (!datalbusToken) {
-    datalbusToken = authenticate()
-    if (!datalbusToken)
-      return e.json(502, {
-        error: 'Erro de autenticação com a API DataBus. Tente novamente em instantes.',
-      })
-  }
+  try {
+    var datalbusToken = getCachedToken()
+    if (!datalbusToken) {
+      datalbusToken = authenticate()
+      if (!datalbusToken)
+        return e.json(502, {
+          error: 'Erro de autenticação com a API DataBus. Tente novamente em instantes.',
+        })
+    }
 
-  var scoreRes = fetchScore(datalbusToken)
-  if (scoreRes.statusCode === 401) {
-    clearCachedToken()
-    datalbusToken = authenticate()
-    if (!datalbusToken) return e.json(502, { error: 'Falha na autenticação com a DataBus' })
-    scoreRes = fetchScore(datalbusToken)
-    if (scoreRes.statusCode === 401)
-      return e.json(502, { error: 'Falha na autenticação com a DataBus' })
-  }
+    var scoreRes = fetchScore(datalbusToken)
+    if (scoreRes.statusCode === 401) {
+      clearCachedToken()
+      datalbusToken = authenticate()
+      if (!datalbusToken) return e.json(502, { error: 'Falha na autenticação com a DataBus' })
+      scoreRes = fetchScore(datalbusToken)
+      if (scoreRes.statusCode === 401)
+        return e.json(502, { error: 'Falha na autenticação com a DataBus' })
+    }
 
-  var trips = fetchTripsPrimary(datalbusToken)
-  if (!trips || trips.length === 0) {
-    $app.logger().info('Datalbus: primary endpoint returned no trips, falling back')
-    trips = fetchTripsFallback(datalbusToken)
-  }
+    var trips = fetchTripsPrimary(datalbusToken)
+    if (!trips || trips.length === 0) {
+      $app.logger().info('Datalbus: primary endpoint returned no trips, falling back')
+      trips = fetchTripsFallback(datalbusToken)
+    }
 
-  $app.logger().info('Datalbus: total trips to process', 'totalTrips', trips.length)
+    $app.logger().info('Datalbus: total trips to process', 'totalTrips', trips.length)
 
-  var allEvents = []
-  var pontuacao = null
+    var allEvents = []
+    var pontuacao = null
 
-  for (var n = 0; n < trips.length; n++) {
-    var tripId = getTripId(trips[n])
-    if (!tripId) continue
-    var tripDate = getTripDate(trips[n])
-    var tripEvents = fetchEventsForTrip(tripId, tripDate, datalbusToken)
-    for (var p = 0; p < tripEvents.length; p++) {
-      var ev = tripEvents[p]
-      var tipo = String(
-        ev.event_type_description ||
-          ev.event_type ||
-          ev.tipo ||
-          ev.type ||
-          ev.event_name ||
-          ev.descricao_evento ||
-          '',
+    for (var n = 0; n < trips.length; n++) {
+      var tripId = getTripId(trips[n])
+      if (!tripId) continue
+      var tripDate = getTripDate(trips[n])
+      var tripEvents = fetchEventsForTrip(tripId, tripDate, datalbusToken)
+      for (var p = 0; p < tripEvents.length; p++) {
+        var ev = tripEvents[p]
+        var tipo = String(
+          ev.event_type_description ||
+            ev.event_type ||
+            ev.tipo ||
+            ev.type ||
+            ev.event_name ||
+            ev.descricao_evento ||
+            '',
+        )
+
+        if (isTechnicalEvent(tipo)) continue
+
+        if (tipo === 'Pontuação do Motorista na Viagem') {
+          var scoreVal = ev.score || ev.pontuacao || ev.valor || ev.amount || ev.value
+          if (scoreVal !== undefined && scoreVal !== null && scoreVal !== '') {
+            pontuacao = parseFloat(String(scoreVal))
+            if (isNaN(pontuacao)) pontuacao = null
+          }
+          continue
+        }
+
+        allEvents.push({
+          data: String(
+            ev.time ||
+              ev.event_date ||
+              ev.data ||
+              ev.date_time ||
+              ev.timestamp ||
+              ev.created_at ||
+              ev.datetime ||
+              ev.data_hora ||
+              '',
+          ),
+          tipo: tipo,
+          veiculo: String(
+            ev.asset_id ||
+              ev.veiculo ||
+              ev.vehicle ||
+              ev.plate ||
+              ev.placa ||
+              ev.bus ||
+              ev.vehicle_plate ||
+              ev.prefixo ||
+              '',
+          ),
+          descricao: String(
+            ev.description ||
+              ev.descricao ||
+              ev.localizacao ||
+              ev.location ||
+              ev.address ||
+              ev.local ||
+              ev.place ||
+              '',
+          ),
+          duracao: ev.duration || ev.duracao || ev.duration_seconds || 0,
+          latitude: ev.latitude || ev.lat || 0,
+          longitude: ev.longitude || ev.lng || ev.lon || 0,
+          quantidade:
+            ev.amount !== undefined ? ev.amount : ev.quantidade !== undefined ? ev.quantidade : 0,
+        })
+      }
+    }
+
+    $app
+      .logger()
+      .info('Datalbus: events collected', 'totalEvents', allEvents.length, 'pontuacao', pontuacao)
+
+    var eventos = allEvents
+
+    var resumo = {}
+    for (var j = 0; j < eventos.length; j++) {
+      var t = eventos[j].tipo
+      if (t) {
+        if (!resumo[t]) resumo[t] = 0
+        resumo[t]++
+      }
+    }
+
+    var distanciaTotal = 0
+    var duracaoTotal = 0
+    for (var k = 0; k < trips.length; k++) {
+      var mileage = trips[k].mileage || trips[k].distancia || trips[k].km || 0
+      var driveDur =
+        trips[k].drive_duration || trips[k].duracao_direcao || trips[k].driving_duration || 0
+      var mileageNum = parseFloat(String(mileage))
+      if (!isNaN(mileageNum)) distanciaTotal += mileageNum
+      var driveDurNum = parseFloat(String(driveDur))
+      if (!isNaN(driveDurNum)) duracaoTotal += driveDurNum
+    }
+
+    var scoreData = scoreRes.json || {}
+    var finalPontuacao = pontuacao !== null ? pontuacao : scoreData
+
+    $app
+      .logger()
+      .info(
+        'Datalbus: telemetry success',
+        'eventos',
+        eventos.length,
+        'totalViagens',
+        trips.length,
+        'distanciaTotal',
+        distanciaTotal,
+        'duracaoTotal',
+        duracaoTotal,
+        'resumoKeys',
+        Object.keys(resumo).length,
       )
 
-      if (isTechnicalEvent(tipo)) continue
-
-      if (tipo === 'Pontuação do Motorista na Viagem') {
-        var scoreVal = ev.score || ev.pontuacao || ev.valor || ev.amount || ev.value
-        if (scoreVal !== undefined && scoreVal !== null && scoreVal !== '') {
-          pontuacao = parseFloat(String(scoreVal))
-          if (isNaN(pontuacao)) pontuacao = null
-        }
-        continue
-      }
-
-      allEvents.push({
-        data: String(
-          ev.time ||
-            ev.event_date ||
-            ev.data ||
-            ev.date_time ||
-            ev.timestamp ||
-            ev.created_at ||
-            ev.datetime ||
-            ev.data_hora ||
-            '',
-        ),
-        tipo: tipo,
-        veiculo: String(
-          ev.asset_id ||
-            ev.veiculo ||
-            ev.vehicle ||
-            ev.plate ||
-            ev.placa ||
-            ev.bus ||
-            ev.vehicle_plate ||
-            ev.prefixo ||
-            '',
-        ),
-        descricao: String(
-          ev.description ||
-            ev.descricao ||
-            ev.localizacao ||
-            ev.location ||
-            ev.address ||
-            ev.local ||
-            ev.place ||
-            '',
-        ),
-        duracao: ev.duration || ev.duracao || ev.duration_seconds || 0,
-        latitude: ev.latitude || ev.lat || 0,
-        longitude: ev.longitude || ev.lng || ev.lon || 0,
-        quantidade:
-          ev.amount !== undefined ? ev.amount : ev.quantidade !== undefined ? ev.quantidade : 0,
-      })
-    }
+    return e.json(200, {
+      pontuacao: finalPontuacao,
+      eventos: eventos,
+      resumo: resumo,
+      total_viagens: trips.length,
+      metricas: {
+        distancia_total: distanciaTotal,
+        duracao_total: duracaoTotal,
+      },
+    })
+  } catch (err) {
+    $app.logger().error('Datalbus telemetry unexpected error', 'message', String(err))
+    return e.json(502, {
+      error: 'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.',
+    })
   }
-
-  $app
-    .logger()
-    .info('Datalbus: events collected', 'totalEvents', allEvents.length, 'pontuacao', pontuacao)
-
-  var eventos = allEvents
-
-  var resumo = {}
-  for (var j = 0; j < eventos.length; j++) {
-    var t = eventos[j].tipo
-    if (t) {
-      if (!resumo[t]) resumo[t] = 0
-      resumo[t]++
-    }
-  }
-
-  var distanciaTotal = 0
-  var duracaoTotal = 0
-  for (var k = 0; k < trips.length; k++) {
-    var mileage = trips[k].mileage || trips[k].distancia || trips[k].km || 0
-    var driveDur =
-      trips[k].drive_duration || trips[k].duracao_direcao || trips[k].driving_duration || 0
-    var mileageNum = parseFloat(String(mileage))
-    if (!isNaN(mileageNum)) distanciaTotal += mileageNum
-    var driveDurNum = parseFloat(String(driveDur))
-    if (!isNaN(driveDurNum)) duracaoTotal += driveDurNum
-  }
-
-  var scoreData = scoreRes.json || {}
-  var finalPontuacao = pontuacao !== null ? pontuacao : scoreData
-
-  $app
-    .logger()
-    .info(
-      'Datalbus: telemetry success',
-      'eventos',
-      eventos.length,
-      'totalViagens',
-      trips.length,
-      'distanciaTotal',
-      distanciaTotal,
-      'duracaoTotal',
-      duracaoTotal,
-      'resumoKeys',
-      Object.keys(resumo).length,
-    )
-
-  return e.json(200, {
-    pontuacao: finalPontuacao,
-    eventos: eventos,
-    resumo: resumo,
-    total_viagens: trips.length,
-    metricas: {
-      distancia_total: distanciaTotal,
-      duracao_total: duracaoTotal,
-    },
-  })
 })
