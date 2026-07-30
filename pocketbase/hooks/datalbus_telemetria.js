@@ -44,10 +44,8 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
   }
 
   var API_TIMEOUT = 15
-  var GLOBAL_TIMEOUT_MS = 30000
-  var MAX_TRIPS = 20
-  var BATCH_SIZE = 5
-  var MAX_PAGES = 5
+  var GLOBAL_TIMEOUT_MS = 55000
+  var MAX_TRIPS = 40
   var globalDeadline = Date.now() + GLOBAL_TIMEOUT_MS
 
   var datalbusEmail = $secrets.get('DATALBUS_EMAIL') || ''
@@ -199,13 +197,14 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return false
   }
 
-  async function fetchEventsForTripAsync(trip, token) {
+  function fetchEventsForTrip(trip, token) {
     var tripId = getTripId(trip)
     if (!tripId) return { events: [], error: 'No trip ID', tripId: tripId }
     var tripDate = getTripDate(trip)
     var events = []
     var page = 1
     var hasMore = true
+    var MAX_PAGES = 5
     var baseUrl =
       'https://datalbus.com.br:8000/api/v2/trips/' + encodeURIComponent(String(tripId)) + '/events'
     if (tripDate) baseUrl += '?date=' + encodeURIComponent(tripDate)
@@ -215,29 +214,13 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         return { events: events, error: 'Global timeout reached', tripId: tripId }
       var separator = baseUrl.indexOf('?') >= 0 ? '&' : '?'
       var url = baseUrl + separator + 'per_page=100&page=' + page
-      try {
-        var res = await fetch(url, {
-          method: 'GET',
-          headers: {
-            Authorization: 'Bearer ' + token,
-            'X-Tenancy': datalbusXTenancy,
-            Accept: 'application/json',
-          },
-          idleTimeout: API_TIMEOUT,
-        })
-        if (!res.ok) return { events: events, error: 'API error: ' + res.status, tripId: tripId }
-        var text = await res.text()
-        var parsed = null
-        try {
-          parsed = JSON.parse(text)
-        } catch (_) {}
-        var pageEvents = extractArray(parsed)
-        for (var j = 0; j < pageEvents.length; j++) events.push(pageEvents[j])
-        if (pageEvents.length < 100 || pageEvents.length === 0 || page >= MAX_PAGES) hasMore = false
-        else page++
-      } catch (err) {
-        return { events: events, error: String((err && err.message) || err), tripId: tripId }
-      }
+      var res = apiGet(url, token)
+      if (res.statusCode !== 200 || !res.json)
+        return { events: events, error: 'API error: ' + res.statusCode, tripId: tripId }
+      var pageEvents = extractArray(res.json)
+      for (var j = 0; j < pageEvents.length; j++) events.push(pageEvents[j])
+      if (pageEvents.length < 100 || pageEvents.length === 0 || page >= MAX_PAGES) hasMore = false
+      else page++
     }
     return { events: events, error: null, tripId: tripId }
   }
@@ -245,6 +228,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
   function fetchTripsPrimary(token) {
     var allTrips = []
     var page = 1
+    var MAX_PAGES = 10
     while (page <= MAX_PAGES) {
       if (Date.now() > globalDeadline) break
       var url =
@@ -269,6 +253,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
   function fetchTripsFallback(token) {
     var allTrips = []
     var page = 1
+    var MAX_PAGES = 10
     while (page <= MAX_PAGES) {
       if (Date.now() > globalDeadline) break
       var url =
@@ -333,35 +318,22 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     var allRawEvents = []
     var errors = []
 
-    for (var i = 0; i < trips.length; i += BATCH_SIZE) {
+    for (var i = 0; i < trips.length; i++) {
       if (Date.now() > globalDeadline) {
         partialData = true
         for (var j = i; j < trips.length; j++)
           errors.push({ tripId: getTripId(trips[j]), error: 'Skipped due to global timeout' })
         break
       }
-      var batch = trips.slice(i, i + BATCH_SIZE)
-      var batchResults = await Promise.all(
-        batch.map(function (trip) {
-          return fetchEventsForTripAsync(trip, datalbusToken).catch(function (err) {
-            return {
-              events: [],
-              error: String((err && err.message) || err),
-              tripId: getTripId(trip),
-            }
-          })
-        }),
-      )
-      for (var k = 0; k < batchResults.length; k++) {
-        if (batchResults[k].error)
-          errors.push({
-            tripId: batchResults[k].tripId || getTripId(batch[k]),
-            error: batchResults[k].error,
-          })
-        if (batchResults[k].events && batchResults[k].events.length > 0) {
-          for (var p = 0; p < batchResults[k].events.length; p++)
-            allRawEvents.push(batchResults[k].events[p])
-        }
+      var result = fetchEventsForTrip(trips[i], datalbusToken)
+      if (result.error) {
+        errors.push({
+          tripId: result.tripId || getTripId(trips[i]),
+          error: result.error,
+        })
+      }
+      if (result.events && result.events.length > 0) {
+        for (var p = 0; p < result.events.length; p++) allRawEvents.push(result.events[p])
       }
     }
 
