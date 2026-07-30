@@ -182,52 +182,100 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     return apiGet(url, token)
   }
 
+  function tripMatchesWorkerId(trip) {
+    var subtrips = trip.subtrips || trip.sub_trips || trip.subTrips || []
+    if (!Array.isArray(subtrips)) return false
+    for (var s = 0; s < subtrips.length; s++) {
+      var sub = subtrips[s]
+      var subWorkerRaw = sub.worker_id || sub.workerId || sub.worker_id_int || ''
+      var subWorkerNum = parseInt(String(subWorkerRaw), 10)
+      if (!isNaN(subWorkerNum) && subWorkerNum === workerId) {
+        return true
+      }
+    }
+    return false
+  }
+
+  function getTripId(trip) {
+    return trip.id || trip.trip_id || trip.tripId || ''
+  }
+
+  function fetchEventsByTripId(tripId, token) {
+    var events = []
+
+    var teUrl =
+      'https://datalbus.com.br:8000/api/v2/trip-events?trip_id=' +
+      encodeURIComponent(String(tripId))
+    var teRes = apiGet(teUrl, token)
+    if (teRes.statusCode === 200 && teRes.json) {
+      var tl = extractArray(teRes.json)
+      for (var j = 0; j < tl.length; j++) events.push(tl[j])
+    }
+
+    if (events.length === 0) {
+      var efUrl =
+        'https://datalbus.com.br:8000/api/v2/trips/events/filtered?trip_id=' +
+        encodeURIComponent(String(tripId)) +
+        '&per_page=100'
+      var efRes = apiGet(efUrl, token)
+      if (efRes.statusCode === 200 && efRes.json) {
+        var el = extractArray(efRes.json)
+        for (var k = 0; k < el.length; k++) events.push(el[k])
+      }
+    }
+
+    return events
+  }
+
   function fetchEvents(token) {
-    var primaryUrl =
-      'https://datalbus.com.br:8000/api/v2/trips/events/filtered?worker_id=' +
-      workerId +
-      '&start_date=' +
+    var tripsUrl =
+      'https://datalbus.com.br:8000/api/v2/trips?start_date=' +
       encodeURIComponent(dataInicial) +
       '&end_date=' +
-      encodeURIComponent(dataFinal) +
-      '&per_page=100'
-    var res = apiGet(primaryUrl, token)
-    if (res.statusCode === 200 && res.json) {
-      var list = extractArray(res.json)
-      if (list.length > 0) return list
+      encodeURIComponent(dataFinal)
+    var tripsRes = apiGet(tripsUrl, token)
+    if (tripsRes.statusCode !== 200 || !tripsRes.json) {
+      $app.logger().error('Datalbus: failed to fetch all trips', 'statusCode', tripsRes.statusCode)
+      return []
+    }
+
+    var allTrips = extractArray(tripsRes.json)
+    $app.logger().info('Datalbus: fetched all trips for period', 'totalTrips', allTrips.length)
+
+    var matchedTrips = []
+    for (var i = 0; i < allTrips.length; i++) {
+      if (tripMatchesWorkerId(allTrips[i])) {
+        matchedTrips.push(allTrips[i])
+      }
     }
 
     $app
       .logger()
       .info(
-        'Datalbus: events/filtered failed or empty, trying fallback',
-        'statusCode',
-        res.statusCode,
+        'Datalbus: trips matched by subtrip worker_id',
+        'matchedTrips',
+        matchedTrips.length,
+        'workerId',
+        workerId,
       )
-    var tripsUrl =
-      'https://datalbus.com.br:8000/api/v2/trips?worker_id=' +
-      workerId +
-      '&start_date=' +
-      encodeURIComponent(dataInicial) +
-      '&end_date=' +
-      encodeURIComponent(dataFinal)
-    var tripsRes = apiGet(tripsUrl, token)
-    if (tripsRes.statusCode !== 200 || !tripsRes.json) return []
 
-    var tripList = extractArray(tripsRes.json)
-    var allEvents = []
-    for (var i = 0; i < tripList.length; i++) {
-      var tripId = tripList[i].id || tripList[i].trip_id || tripList[i].tripId || ''
-      if (!tripId) continue
-      var teUrl =
-        'https://datalbus.com.br:8000/api/v2/trip-events?trip_id=' +
-        encodeURIComponent(String(tripId))
-      var teRes = apiGet(teUrl, token)
-      if (teRes.statusCode === 200 && teRes.json) {
-        var tl = extractArray(teRes.json)
-        for (var j = 0; j < tl.length; j++) allEvents.push(tl[j])
-      }
+    if (matchedTrips.length === 0) {
+      $app.logger().info('Datalbus: no trips matched worker_id in subtrips', 'workerId', workerId)
+      return []
     }
+
+    var allEvents = []
+    for (var m = 0; m < matchedTrips.length; m++) {
+      var tripId = getTripId(matchedTrips[m])
+      if (!tripId) continue
+      var tripEvents = fetchEventsByTripId(tripId, token)
+      for (var n = 0; n < tripEvents.length; n++) allEvents.push(tripEvents[n])
+    }
+
+    $app
+      .logger()
+      .info('Datalbus: events collected from matched trips', 'totalEvents', allEvents.length)
+
     return allEvents
   }
 
