@@ -1,5 +1,14 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Loader2, Search, AlertCircle, Gauge, Route, Clock, MapPin } from 'lucide-react'
+import {
+  Loader2,
+  Search,
+  AlertCircle,
+  AlertTriangle,
+  Gauge,
+  Route,
+  Clock,
+  MapPin,
+} from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -297,6 +306,18 @@ export default function Telemetria() {
 
       {hasConsulted && !loading && !error && results && (
         <>
+          {results.partialData && (
+            <Alert className="border-amber-200 bg-amber-50">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              <AlertTitle className="text-amber-800">Dados Parciais</AlertTitle>
+              <AlertDescription className="text-amber-700">
+                O processamento foi limitado para evitar timeout.{' '}
+                {results.errors && results.errors.length > 0
+                  ? `${results.errors.length} viagem(ões) não puderam ser processada(s).`
+                  : 'Apenas as viagens mais recentes foram processadas.'}
+              </AlertDescription>
+            </Alert>
+          )}
           {score !== null && (
             <Card className="border-slate-200">
               <CardContent className="p-6">

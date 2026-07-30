@@ -32,12 +32,19 @@ export interface TelemetryMetricas {
   duracao_total: number
 }
 
+export interface TelemetryError {
+  tripId: string
+  error: string
+}
+
 export interface TelemetryRecord {
   pontuacao: TelemetryScore | number
   eventos: TelemetryEvent[]
   resumo: Record<string, number>
   total_viagens: number
   metricas: TelemetryMetricas
+  partialData?: boolean
+  errors?: TelemetryError[]
 }
 
 export interface TelemetryQuery {

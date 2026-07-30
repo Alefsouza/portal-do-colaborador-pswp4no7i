@@ -1,4 +1,4 @@
-routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
+routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
   var corsOrigin = e.request.header.get('Origin') || '*'
   e.response.header().set('Access-Control-Allow-Origin', corsOrigin)
   e.response.header().set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -40,10 +40,15 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
 
   var diffDays = Math.ceil((parsedFinal.getTime() - parsedInicial.getTime()) / 86400000)
   if (diffDays > 31) {
-    return e.json(400, {
-      error: 'O período máximo permitido é de 31 dias. Selecione um intervalo menor.',
-    })
+    return e.json(400, { error: 'O período máximo permitido é de 31 dias.' })
   }
+
+  var API_TIMEOUT = 15
+  var GLOBAL_TIMEOUT_MS = 30000
+  var MAX_TRIPS = 20
+  var BATCH_SIZE = 5
+  var MAX_PAGES = 5
+  var globalDeadline = Date.now() + GLOBAL_TIMEOUT_MS
 
   var datalbusEmail = $secrets.get('DATALBUS_EMAIL') || ''
   var datalbusPassword = $secrets.get('DATALBUS_PASSWORD') || ''
@@ -102,16 +107,13 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Tenancy': datalbusXTenancy },
         body: JSON.stringify({ email: datalbusEmail, password: datalbusPassword }),
-        timeout: 15,
+        timeout: API_TIMEOUT,
       })
     } catch (err) {
       $app.logger().error('Datalbus auth error', 'message', err.message)
       return ''
     }
-    if (authRes.statusCode !== 200) {
-      $app.logger().error('Datalbus auth failed', 'statusCode', authRes.statusCode)
-      return ''
-    }
+    if (authRes.statusCode !== 200) return ''
     var token = ''
     try {
       var j = authRes.json
@@ -128,7 +130,6 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
   }
 
   function apiGet(url, token) {
-    $app.logger().info('Datalbus API request', 'url', url, 'method', 'GET')
     try {
       var res = $http.send({
         url: url,
@@ -138,29 +139,16 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
           'X-Tenancy': datalbusXTenancy,
           Accept: 'application/json',
         },
-        timeout: 30,
+        timeout: API_TIMEOUT,
       })
-      var rawBody = String(res.body || '')
-      $app
-        .logger()
-        .info(
-          'Datalbus API response',
-          'url',
-          url,
-          'statusCode',
-          res.statusCode,
-          'body',
-          rawBody.substring(0, 2000),
-        )
       var parsed = null
       if (res.body) {
         try {
           parsed = res.json
         } catch (_) {}
       }
-      return { statusCode: res.statusCode, json: parsed, body: rawBody }
+      return { statusCode: res.statusCode, json: parsed, body: String(res.body || '') }
     } catch (err) {
-      $app.logger().error('Datalbus GET error', 'message', err.message, 'url', url)
       return { statusCode: 0, json: null, body: '' }
     }
   }
@@ -186,73 +174,79 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     'Sumario de uso do Retarder': true,
     'Utilização do Neutro Automático': true,
   }
-
   function isTechnicalEvent(tipo) {
     return !!TECHNICAL_EVENTS[tipo]
   }
-
   function getTripId(trip) {
     return trip.id || trip.trip_id || trip.tripId || ''
   }
-
   function getTripDate(trip) {
     var d = trip.date || trip.data || trip.data_viagem || trip.start_date || ''
     if (!d) return ''
-    var parts = String(d).split('T')
-    return parts[0] || ''
+    return String(d).split('T')[0] || ''
   }
 
   function tripMatchesWorkerId(trip) {
     var subtrips = trip.subtrips || trip.sub_trips || trip.subTrips || []
     if (!Array.isArray(subtrips)) return false
     for (var s = 0; s < subtrips.length; s++) {
-      var sub = subtrips[s]
-      var subWorkerRaw = sub.worker_id || sub.workerId || sub.worker_id_int || ''
-      var subWorkerNum = parseInt(String(subWorkerRaw), 10)
-      if (!isNaN(subWorkerNum) && subWorkerNum === workerId) {
-        return true
-      }
+      var subWorkerNum = parseInt(
+        String(subtrips[s].worker_id || subtrips[s].workerId || subtrips[s].worker_id_int || ''),
+        10,
+      )
+      if (!isNaN(subWorkerNum) && subWorkerNum === workerId) return true
     }
     return false
   }
 
-  function fetchEventsForTrip(tripId, tripDate, token) {
+  async function fetchEventsForTripAsync(trip, token) {
+    var tripId = getTripId(trip)
+    if (!tripId) return { events: [], error: 'No trip ID', tripId: tripId }
+    var tripDate = getTripDate(trip)
     var events = []
     var page = 1
     var hasMore = true
-
     var baseUrl =
       'https://datalbus.com.br:8000/api/v2/trips/' + encodeURIComponent(String(tripId)) + '/events'
-    if (tripDate) {
-      baseUrl += '?date=' + encodeURIComponent(tripDate)
-    }
+    if (tripDate) baseUrl += '?date=' + encodeURIComponent(tripDate)
 
     while (hasMore) {
+      if (Date.now() > globalDeadline)
+        return { events: events, error: 'Global timeout reached', tripId: tripId }
       var separator = baseUrl.indexOf('?') >= 0 ? '&' : '?'
       var url = baseUrl + separator + 'per_page=100&page=' + page
-      var res = apiGet(url, token)
-      if (res.statusCode === 200 && res.json) {
-        var pageEvents = extractArray(res.json)
+      try {
+        var res = await fetch(url, {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer ' + token,
+            'X-Tenancy': datalbusXTenancy,
+            Accept: 'application/json',
+          },
+          idleTimeout: API_TIMEOUT,
+        })
+        if (!res.ok) return { events: events, error: 'API error: ' + res.status, tripId: tripId }
+        var text = await res.text()
+        var parsed = null
+        try {
+          parsed = JSON.parse(text)
+        } catch (_) {}
+        var pageEvents = extractArray(parsed)
         for (var j = 0; j < pageEvents.length; j++) events.push(pageEvents[j])
-        if (pageEvents.length < 100 || pageEvents.length === 0) {
-          hasMore = false
-        } else {
-          page++
-        }
-      } else {
-        hasMore = false
+        if (pageEvents.length < 100 || pageEvents.length === 0 || page >= MAX_PAGES) hasMore = false
+        else page++
+      } catch (err) {
+        return { events: events, error: String((err && err.message) || err), tripId: tripId }
       }
     }
-
-    return events
+    return { events: events, error: null, tripId: tripId }
   }
 
   function fetchTripsPrimary(token) {
     var allTrips = []
     var page = 1
-    var hasMore = true
-
-    while (hasMore) {
+    while (page <= MAX_PAGES) {
+      if (Date.now() > globalDeadline) break
       var url =
         'https://datalbus.com.br:8000/api/v2/trips?worker_id=' +
         encodeURIComponent(String(workerId)) +
@@ -263,79 +257,36 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
         '&per_page=100&page=' +
         page
       var res = apiGet(url, token)
-      if (res.statusCode !== 200 || !res.json) {
-        $app
-          .logger()
-          .info(
-            'Datalbus: primary trips endpoint failed or empty',
-            'statusCode',
-            res.statusCode,
-            'page',
-            page,
-          )
-        return null
-      }
+      if (res.statusCode !== 200 || !res.json) return null
       var pageTrips = extractArray(res.json)
-      $app
-        .logger()
-        .info('Datalbus: primary trips page', 'page', page, 'tripsInPage', pageTrips.length)
       for (var i = 0; i < pageTrips.length; i++) allTrips.push(pageTrips[i])
-      if (pageTrips.length < 100 || pageTrips.length === 0) {
-        hasMore = false
-      } else {
-        page++
-      }
+      if (pageTrips.length < 100 || pageTrips.length === 0) break
+      page++
     }
-
-    $app.logger().info('Datalbus: primary trips fetched', 'totalTrips', allTrips.length)
     return allTrips
   }
 
   function fetchTripsFallback(token) {
     var allTrips = []
     var page = 1
-    var hasMore = true
-
-    while (hasMore) {
+    while (page <= MAX_PAGES) {
+      if (Date.now() > globalDeadline) break
       var url =
         'https://datalbus.com.br:8000/api/v2/trips?date=' +
         encodeURIComponent(dataInicial) +
         '&per_page=100&page=' +
         page
       var res = apiGet(url, token)
-      if (res.statusCode !== 200 || !res.json) {
-        $app
-          .logger()
-          .error('Datalbus: fallback trips failed', 'statusCode', res.statusCode, 'page', page)
-        hasMore = false
-        break
-      }
+      if (res.statusCode !== 200 || !res.json) break
       var pageTrips = extractArray(res.json)
-      $app
-        .logger()
-        .info('Datalbus: fallback trips page', 'page', page, 'tripsInPage', pageTrips.length)
       for (var i = 0; i < pageTrips.length; i++) allTrips.push(pageTrips[i])
-      if (pageTrips.length < 100 || pageTrips.length === 0) {
-        hasMore = false
-      } else {
-        page++
-      }
+      if (pageTrips.length < 100 || pageTrips.length === 0) break
+      page++
     }
-
     var matched = []
     for (var m = 0; m < allTrips.length; m++) {
       if (tripMatchesWorkerId(allTrips[m])) matched.push(allTrips[m])
     }
-
-    $app
-      .logger()
-      .info(
-        'Datalbus: fallback trips matched by worker_id',
-        'matchedTrips',
-        matched.length,
-        'workerId',
-        workerId,
-      )
     return matched
   }
 
@@ -354,10 +305,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     var datalbusToken = getCachedToken()
     if (!datalbusToken) {
       datalbusToken = authenticate()
-      if (!datalbusToken)
-        return e.json(502, {
-          error: 'Erro de autenticação com a API DataBus. Tente novamente em instantes.',
-        })
+      if (!datalbusToken) return e.json(502, { error: 'Erro de autenticação com a API DataBus.' })
     }
 
     var scoreRes = fetchScore(datalbusToken)
@@ -366,101 +314,126 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
       datalbusToken = authenticate()
       if (!datalbusToken) return e.json(502, { error: 'Falha na autenticação com a DataBus' })
       scoreRes = fetchScore(datalbusToken)
-      if (scoreRes.statusCode === 401)
-        return e.json(502, { error: 'Falha na autenticação com a DataBus' })
     }
 
     var trips = fetchTripsPrimary(datalbusToken)
-    if (!trips || trips.length === 0) {
-      $app.logger().info('Datalbus: primary endpoint returned no trips, falling back')
-      trips = fetchTripsFallback(datalbusToken)
+    if (!trips || trips.length === 0) trips = fetchTripsFallback(datalbusToken)
+    if (!trips) trips = []
+
+    trips.sort(function (a, b) {
+      return getTripDate(b).localeCompare(getTripDate(a))
+    })
+
+    var partialData = false
+    if (trips.length > MAX_TRIPS) {
+      partialData = true
+      trips = trips.slice(0, MAX_TRIPS)
     }
 
-    $app.logger().info('Datalbus: total trips to process', 'totalTrips', trips.length)
+    var allRawEvents = []
+    var errors = []
 
-    var allEvents = []
-    var pontuacao = null
-
-    for (var n = 0; n < trips.length; n++) {
-      var tripId = getTripId(trips[n])
-      if (!tripId) continue
-      var tripDate = getTripDate(trips[n])
-      var tripEvents = fetchEventsForTrip(tripId, tripDate, datalbusToken)
-      for (var p = 0; p < tripEvents.length; p++) {
-        var ev = tripEvents[p]
-        var tipo = String(
-          ev.event_type_description ||
-            ev.event_type ||
-            ev.tipo ||
-            ev.type ||
-            ev.event_name ||
-            ev.descricao_evento ||
-            '',
-        )
-
-        if (isTechnicalEvent(tipo)) continue
-
-        if (tipo === 'Pontuação do Motorista na Viagem') {
-          var scoreVal = ev.score || ev.pontuacao || ev.valor || ev.amount || ev.value
-          if (scoreVal !== undefined && scoreVal !== null && scoreVal !== '') {
-            pontuacao = parseFloat(String(scoreVal))
-            if (isNaN(pontuacao)) pontuacao = null
-          }
-          continue
+    for (var i = 0; i < trips.length; i += BATCH_SIZE) {
+      if (Date.now() > globalDeadline) {
+        partialData = true
+        for (var j = i; j < trips.length; j++)
+          errors.push({ tripId: getTripId(trips[j]), error: 'Skipped due to global timeout' })
+        break
+      }
+      var batch = trips.slice(i, i + BATCH_SIZE)
+      var batchResults = await Promise.all(
+        batch.map(function (trip) {
+          return fetchEventsForTripAsync(trip, datalbusToken).catch(function (err) {
+            return {
+              events: [],
+              error: String((err && err.message) || err),
+              tripId: getTripId(trip),
+            }
+          })
+        }),
+      )
+      for (var k = 0; k < batchResults.length; k++) {
+        if (batchResults[k].error)
+          errors.push({
+            tripId: batchResults[k].tripId || getTripId(batch[k]),
+            error: batchResults[k].error,
+          })
+        if (batchResults[k].events && batchResults[k].events.length > 0) {
+          for (var p = 0; p < batchResults[k].events.length; p++)
+            allRawEvents.push(batchResults[k].events[p])
         }
-
-        allEvents.push({
-          data: String(
-            ev.time ||
-              ev.event_date ||
-              ev.data ||
-              ev.date_time ||
-              ev.timestamp ||
-              ev.created_at ||
-              ev.datetime ||
-              ev.data_hora ||
-              '',
-          ),
-          tipo: tipo,
-          veiculo: String(
-            ev.asset_id ||
-              ev.veiculo ||
-              ev.vehicle ||
-              ev.plate ||
-              ev.placa ||
-              ev.bus ||
-              ev.vehicle_plate ||
-              ev.prefixo ||
-              '',
-          ),
-          descricao: String(
-            ev.description ||
-              ev.descricao ||
-              ev.localizacao ||
-              ev.location ||
-              ev.address ||
-              ev.local ||
-              ev.place ||
-              '',
-          ),
-          duracao: ev.duration || ev.duracao || ev.duration_seconds || 0,
-          latitude: ev.latitude || ev.lat || 0,
-          longitude: ev.longitude || ev.lng || ev.lon || 0,
-          quantidade:
-            ev.amount !== undefined ? ev.amount : ev.quantidade !== undefined ? ev.quantidade : 0,
-        })
       }
     }
 
-    $app
-      .logger()
-      .info('Datalbus: events collected', 'totalEvents', allEvents.length, 'pontuacao', pontuacao)
+    if (Date.now() > globalDeadline) partialData = true
 
-    var eventos = allEvents
+    var eventos = []
+    var pontuacao = null
+    for (var n = 0; n < allRawEvents.length; n++) {
+      var ev = allRawEvents[n]
+      var tipo = String(
+        ev.event_type_description ||
+          ev.event_type ||
+          ev.tipo ||
+          ev.type ||
+          ev.event_name ||
+          ev.descricao_evento ||
+          '',
+      )
+      if (isTechnicalEvent(tipo)) continue
+      if (tipo === 'Pontuação do Motorista na Viagem') {
+        var scoreVal = ev.score || ev.pontuacao || ev.valor || ev.amount || ev.value
+        if (scoreVal !== undefined && scoreVal !== null && scoreVal !== '') {
+          pontuacao = parseFloat(String(scoreVal))
+          if (isNaN(pontuacao)) pontuacao = null
+        }
+        continue
+      }
+      eventos.push({
+        data: String(
+          ev.time ||
+            ev.event_date ||
+            ev.data ||
+            ev.date_time ||
+            ev.timestamp ||
+            ev.created_at ||
+            ev.datetime ||
+            ev.data_hora ||
+            '',
+        ),
+        tipo: tipo,
+        veiculo: String(
+          ev.asset_id ||
+            ev.veiculo ||
+            ev.vehicle ||
+            ev.plate ||
+            ev.placa ||
+            ev.bus ||
+            ev.vehicle_plate ||
+            ev.prefixo ||
+            '',
+        ),
+        descricao: String(
+          ev.description ||
+            ev.descricao ||
+            ev.localizacao ||
+            ev.location ||
+            ev.address ||
+            ev.local ||
+            ev.place ||
+            '',
+        ),
+        duracao: ev.duration || ev.duracao || ev.duration_seconds || 0,
+        latitude: ev.latitude || ev.lat || 0,
+        longitude: ev.longitude || ev.lng || ev.lon || 0,
+        quantidade:
+          ev.amount !== undefined ? ev.amount : ev.quantidade !== undefined ? ev.quantidade : 0,
+      })
+    }
 
     var resumo = {}
-    for (var j = 0; j < eventos.length; j++) {
-      var t = eventos[j].tipo
+    for (var j2 = 0; j2 < eventos.length; j2++) {
+      var t = eventos[j2].tipo
       if (t) {
         if (!resumo[t]) resumo[t] = 0
         resumo[t]++
@@ -469,44 +442,29 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
 
     var distanciaTotal = 0
     var duracaoTotal = 0
-    for (var k = 0; k < trips.length; k++) {
-      var mileage = trips[k].mileage || trips[k].distancia || trips[k].km || 0
-      var driveDur =
-        trips[k].drive_duration || trips[k].duracao_direcao || trips[k].driving_duration || 0
-      var mileageNum = parseFloat(String(mileage))
+    for (var k2 = 0; k2 < trips.length; k2++) {
+      var mileageNum = parseFloat(
+        String(trips[k2].mileage || trips[k2].distancia || trips[k2].km || 0),
+      )
       if (!isNaN(mileageNum)) distanciaTotal += mileageNum
-      var driveDurNum = parseFloat(String(driveDur))
+      var driveDurNum = parseFloat(
+        String(
+          trips[k2].drive_duration || trips[k2].duracao_direcao || trips[k2].driving_duration || 0,
+        ),
+      )
       if (!isNaN(driveDurNum)) duracaoTotal += driveDurNum
     }
 
-    var scoreData = scoreRes.json || {}
-    var finalPontuacao = pontuacao !== null ? pontuacao : scoreData
-
-    $app
-      .logger()
-      .info(
-        'Datalbus: telemetry success',
-        'eventos',
-        eventos.length,
-        'totalViagens',
-        trips.length,
-        'distanciaTotal',
-        distanciaTotal,
-        'duracaoTotal',
-        duracaoTotal,
-        'resumoKeys',
-        Object.keys(resumo).length,
-      )
+    var finalPontuacao = pontuacao !== null ? pontuacao : scoreRes.json || {}
 
     return e.json(200, {
       pontuacao: finalPontuacao,
       eventos: eventos,
       resumo: resumo,
       total_viagens: trips.length,
-      metricas: {
-        distancia_total: distanciaTotal,
-        duracao_total: duracaoTotal,
-      },
+      metricas: { distancia_total: distanciaTotal, duracao_total: duracaoTotal },
+      partialData: partialData,
+      errors: errors,
     })
   } catch (err) {
     $app.logger().error('Datalbus telemetry unexpected error', 'message', String(err))
