@@ -200,14 +200,12 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
   function fetchEventsForTrip(trip, token) {
     var tripId = getTripId(trip)
     if (!tripId) return { events: [], error: 'No trip ID', tripId: tripId }
-    var tripDate = getTripDate(trip)
     var events = []
     var page = 1
     var hasMore = true
     var MAX_PAGES = 5
     var baseUrl =
       'https://datalbus.com.br:8000/api/v2/trips/' + encodeURIComponent(String(tripId)) + '/events'
-    if (tripDate) baseUrl += '?date=' + encodeURIComponent(tripDate)
 
     while (hasMore) {
       if (Date.now() > globalDeadline)
@@ -215,6 +213,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       var separator = baseUrl.indexOf('?') >= 0 ? '&' : '?'
       var url = baseUrl + separator + 'per_page=100&page=' + page
       var res = apiGet(url, token)
+      console.log('[telemetria] trip ' + tripId + ' page ' + page + ' HTTP ' + res.statusCode)
       if (res.statusCode !== 200 || !res.json)
         return { events: events, error: 'API error: ' + res.statusCode, tripId: tripId }
       var pageEvents = extractArray(res.json)
@@ -222,6 +221,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       if (pageEvents.length < 100 || pageEvents.length === 0 || page >= MAX_PAGES) hasMore = false
       else page++
     }
+    console.log('[telemetria] trip ' + tripId + ' returned ' + events.length + ' events')
     return { events: events, error: null, tripId: tripId }
   }
 
@@ -234,9 +234,9 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       var url =
         'https://datalbus.com.br:8000/api/v2/trips?worker_id=' +
         encodeURIComponent(String(workerId)) +
-        '&start_date=' +
+        '&dtIni=' +
         encodeURIComponent(dataInicial) +
-        '&end_date=' +
+        '&dtFin=' +
         encodeURIComponent(dataFinal) +
         '&per_page=100&page=' +
         page
@@ -304,6 +304,11 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     var trips = fetchTripsPrimary(datalbusToken)
     if (!trips || trips.length === 0) trips = fetchTripsFallback(datalbusToken)
     if (!trips) trips = []
+
+    console.log('[telemetria] total trips found: ' + trips.length)
+    var tripIdsLog = []
+    for (var ti = 0; ti < trips.length; ti++) tripIdsLog.push(getTripId(trips[ti]))
+    console.log('[telemetria] trip IDs being processed: ' + tripIdsLog.join(', '))
 
     trips.sort(function (a, b) {
       return getTripDate(b).localeCompare(getTripDate(a))
