@@ -9,6 +9,7 @@ export interface TelemetryEvent {
   duracao: number | string
   latitude: number | string
   longitude: number | string
+  quantidade: number | string
 }
 
 export interface TelemetryScore {
@@ -26,10 +27,17 @@ export interface TelemetryScore {
   [key: string]: unknown
 }
 
+export interface TelemetryMetricas {
+  distancia_total: number
+  duracao_total: number
+}
+
 export interface TelemetryRecord {
-  pontuacao: TelemetryScore
+  pontuacao: TelemetryScore | number
   eventos: TelemetryEvent[]
   resumo: Record<string, number>
+  total_viagens: number
+  metricas: TelemetryMetricas
 }
 
 export interface TelemetryQuery {

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Loader2, Search, AlertCircle, Gauge } from 'lucide-react'
+import { Loader2, Search, AlertCircle, Gauge, Route, Clock, MapPin } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -46,7 +46,16 @@ function formatDuration(duracao: number | string | undefined): string {
   return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
 }
 
-function extractScore(p: TelemetryScore | null | undefined): number | null {
+function formatDriveDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return '-'
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
+
+function extractScore(p: TelemetryScore | number | null | undefined): number | null {
+  if (typeof p === 'number') return p
   if (!p || typeof p !== 'object') return null
   const keys = ['score', 'pontuacao', 'total', 'valor', 'nota', 'overall_score', 'total_score']
   for (const k of keys) {
@@ -58,7 +67,7 @@ function extractScore(p: TelemetryScore | null | undefined): number | null {
   return null
 }
 
-function extractDistance(p: TelemetryScore | null | undefined): number | null {
+function extractDistance(p: TelemetryScore | number | null | undefined): number | null {
   if (!p || typeof p !== 'object') return null
   const keys = [
     'distance',
@@ -167,7 +176,12 @@ export default function Telemetria() {
   }, [dataInicial, dataFinal, workerId])
 
   const score = useMemo(() => extractScore(results?.pontuacao), [results])
-  const distance = useMemo(() => extractDistance(results?.pontuacao), [results])
+  const distance = useMemo(() => {
+    if (results?.metricas?.distancia_total) return results.metricas.distancia_total
+    return extractDistance(results?.pontuacao)
+  }, [results])
+  const totalViagens = useMemo(() => results?.total_viagens ?? 0, [results])
+  const duracaoTotal = useMemo(() => results?.metricas?.duracao_total ?? 0, [results])
   const sortedEvents = useMemo(() => {
     if (!results?.eventos) return []
     return [...results.eventos].sort((a, b) => (b.data || '').localeCompare(a.data || ''))
@@ -286,7 +300,7 @@ export default function Telemetria() {
           {score !== null && (
             <Card className="border-slate-200">
               <CardContent className="p-6">
-                <div className="flex items-center gap-6">
+                <div className="flex flex-wrap items-center gap-6">
                   <div
                     className={cn(
                       'w-20 h-20 rounded-full flex items-center justify-center text-white shrink-0',
@@ -295,7 +309,7 @@ export default function Telemetria() {
                   >
                     <span className="text-3xl font-bold">{Math.round(score)}</span>
                   </div>
-                  <div>
+                  <div className="flex-1 min-w-[200px]">
                     <h3 className="text-lg font-bold text-slate-900">Pontuação Geral</h3>
                     <p className="text-sm text-slate-500 mt-1">
                       Classificação:{' '}
@@ -306,14 +320,33 @@ export default function Telemetria() {
                       {sortedEvents.length === 1 ? 'evento registrado' : 'eventos registrados'} no
                       período
                     </p>
-                    {distance !== null && (
-                      <p className="text-sm text-slate-500">
-                        Distância:{' '}
-                        <span className="font-semibold text-slate-700">
-                          {distance.toFixed(1)} km
-                        </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 flex-shrink-0">
+                    <div className="text-center">
+                      <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center mx-auto mb-1">
+                        <Route className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <p className="text-xl font-bold text-slate-900">{totalViagens}</p>
+                      <p className="text-xs text-slate-500">Viagens</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center mx-auto mb-1">
+                        <MapPin className="w-5 h-5 text-green-600" />
+                      </div>
+                      <p className="text-xl font-bold text-slate-900">
+                        {distance !== null ? distance.toFixed(1) : '-'}
                       </p>
-                    )}
+                      <p className="text-xs text-slate-500">km</p>
+                    </div>
+                    <div className="text-center col-span-2 sm:col-span-1">
+                      <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center mx-auto mb-1">
+                        <Clock className="w-5 h-5 text-amber-600" />
+                      </div>
+                      <p className="text-xl font-bold text-slate-900">
+                        {formatDriveDuration(duracaoTotal)}
+                      </p>
+                      <p className="text-xs text-slate-500">Direção</p>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -351,6 +384,7 @@ export default function Telemetria() {
                         <TableHead className="font-bold text-primary">Tipo do Evento</TableHead>
                         <TableHead className="font-bold text-primary">Veículo</TableHead>
                         <TableHead className="font-bold text-primary">Duração</TableHead>
+                        <TableHead className="font-bold text-primary">Quantidade</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -382,6 +416,11 @@ export default function Telemetria() {
                           <TableCell className="text-slate-600 whitespace-nowrap">
                             {formatDuration(event.duracao)}
                           </TableCell>
+                          <TableCell className="text-slate-600 whitespace-nowrap">
+                            {event.quantidade !== undefined && event.quantidade !== 0
+                              ? event.quantidade
+                              : '-'}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -392,7 +431,9 @@ export default function Telemetria() {
           ) : (
             <Card className="border-slate-200">
               <CardContent className="py-12 text-center">
-                <p className="text-slate-500">Nenhum evento registrado neste período.</p>
+                <p className="text-slate-500">
+                  Nenhum evento de <strong>direção</strong> registrado neste período.
+                </p>
               </CardContent>
             </Card>
           )}

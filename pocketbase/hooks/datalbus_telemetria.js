@@ -43,6 +43,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
   var datalbusEmail = $secrets.get('DATALBUS_EMAIL') || ''
   var datalbusPassword = $secrets.get('DATALBUS_PASSWORD') || ''
   var datalbusTenancy = $secrets.get('DATALBUS_TENANCY') || ''
+  var datalbusXTenancy = $secrets.get('DATALBUS_X_TENANCY') || datalbusTenancy
 
   if (!datalbusEmail || !datalbusPassword || !datalbusTenancy) {
     $app.logger().error('Datalbus credentials not configured')
@@ -94,7 +95,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
       authRes = $http.send({
         url: 'https://datalbus.com.br:8000/api/v2/login',
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Tenancy': datalbusTenancy },
+        headers: { 'Content-Type': 'application/json', 'X-Tenancy': datalbusXTenancy },
         body: JSON.stringify({ email: datalbusEmail, password: datalbusPassword }),
         timeout: 15,
       })
@@ -129,7 +130,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
         method: 'GET',
         headers: {
           Authorization: 'Bearer ' + token,
-          'X-Tenancy': datalbusTenancy,
+          'X-Tenancy': datalbusXTenancy,
           Accept: 'application/json',
         },
         timeout: 30,
@@ -167,19 +168,33 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     if (Array.isArray(data.items)) return data.items
     if (Array.isArray(data.results)) return data.results
     if (Array.isArray(data.eventos)) return data.eventos
+    if (Array.isArray(data.trips)) return data.trips
     if (data.score_events && Array.isArray(data.score_events)) return data.score_events
     return []
   }
 
-  function fetchScore(token) {
-    var url =
-      'https://datalbus.com.br:8000/api/v2/drivers/score?dtIni=' +
-      encodeURIComponent(dataInicial) +
-      '&dtFin=' +
-      encodeURIComponent(dataFinal) +
-      '&workerId[]=' +
-      workerId
-    return apiGet(url, token)
+  var TECHNICAL_EVENTS = {
+    'Histograma Acelerômetro': true,
+    'Histograma de tensão do alternador': true,
+    'Histograma do acelerador': true,
+    'Histograma de uso do freio motor': true,
+    'Sumario de uso do Retarder': true,
+    'Utilização do Neutro Automático': true,
+  }
+
+  function isTechnicalEvent(tipo) {
+    return !!TECHNICAL_EVENTS[tipo]
+  }
+
+  function getTripId(trip) {
+    return trip.id || trip.trip_id || trip.tripId || ''
+  }
+
+  function getTripDate(trip) {
+    var d = trip.date || trip.data || trip.data_viagem || trip.start_date || ''
+    if (!d) return ''
+    var parts = String(d).split('T')
+    return parts[0] || ''
   }
 
   function tripMatchesWorkerId(trip) {
@@ -196,26 +211,25 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     return false
   }
 
-  function getTripId(trip) {
-    return trip.id || trip.trip_id || trip.tripId || ''
-  }
-
-  function fetchEventsByTripId(tripId, token) {
+  function fetchEventsForTrip(tripId, tripDate, token) {
     var events = []
-
     var page = 1
     var hasMore = true
+
+    var baseUrl =
+      'https://datalbus.com.br:8000/api/v2/trips/' + encodeURIComponent(String(tripId)) + '/events'
+    if (tripDate) {
+      baseUrl += '?date=' + encodeURIComponent(tripDate)
+    }
+
     while (hasMore) {
-      var teUrl =
-        'https://datalbus.com.br:8000/api/v2/trip-events?trip_id=' +
-        encodeURIComponent(String(tripId)) +
-        '&per_page=100&page=' +
-        page
-      var teRes = apiGet(teUrl, token)
-      if (teRes.statusCode === 200 && teRes.json) {
-        var tl = extractArray(teRes.json)
-        for (var j = 0; j < tl.length; j++) events.push(tl[j])
-        if (tl.length < 100 || tl.length === 0) {
+      var separator = baseUrl.indexOf('?') >= 0 ? '&' : '?'
+      var url = baseUrl + separator + 'per_page=100&page=' + page
+      var res = apiGet(url, token)
+      if (res.statusCode === 200 && res.json) {
+        var pageEvents = extractArray(res.json)
+        for (var j = 0; j < pageEvents.length; j++) events.push(pageEvents[j])
+        if (pageEvents.length < 100 || pageEvents.length === 0) {
           hasMore = false
         } else {
           page++
@@ -225,63 +239,42 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
       }
     }
 
-    if (events.length === 0) {
-      page = 1
-      hasMore = true
-      while (hasMore) {
-        var efUrl =
-          'https://datalbus.com.br:8000/api/v2/trips/events/filtered?trip_id=' +
-          encodeURIComponent(String(tripId)) +
-          '&per_page=100&page=' +
-          page
-        var efRes = apiGet(efUrl, token)
-        if (efRes.statusCode === 200 && efRes.json) {
-          var el = extractArray(efRes.json)
-          for (var k = 0; k < el.length; k++) events.push(el[k])
-          if (el.length < 100 || el.length === 0) {
-            hasMore = false
-          } else {
-            page++
-          }
-        } else {
-          hasMore = false
-        }
-      }
-    }
-
     return events
   }
 
-  function fetchEvents(token) {
+  function fetchTripsPrimary(token) {
     var allTrips = []
     var page = 1
     var hasMore = true
+
     while (hasMore) {
-      var tripsUrl =
-        'https://datalbus.com.br:8000/api/v2/trips?start_date=' +
+      var url =
+        'https://datalbus.com.br:8000/api/v2/trips?worker_id=' +
+        encodeURIComponent(String(workerId)) +
+        '&start_date=' +
         encodeURIComponent(dataInicial) +
         '&end_date=' +
         encodeURIComponent(dataFinal) +
         '&per_page=100&page=' +
         page
-      var tripsRes = apiGet(tripsUrl, token)
-      if (tripsRes.statusCode !== 200 || !tripsRes.json) {
+      var res = apiGet(url, token)
+      if (res.statusCode !== 200 || !res.json) {
         $app
           .logger()
-          .error('Datalbus: failed to fetch trips', 'statusCode', tripsRes.statusCode, 'page', page)
-        hasMore = false
-        break
+          .info(
+            'Datalbus: primary trips endpoint failed or empty',
+            'statusCode',
+            res.statusCode,
+            'page',
+            page,
+          )
+        return null
       }
-
-      var pageTrips = extractArray(tripsRes.json)
+      var pageTrips = extractArray(res.json)
       $app
         .logger()
-        .info('Datalbus: fetched trips page', 'page', page, 'tripsInPage', pageTrips.length)
-
-      for (var i = 0; i < pageTrips.length; i++) {
-        allTrips.push(pageTrips[i])
-      }
-
+        .info('Datalbus: primary trips page', 'page', page, 'tripsInPage', pageTrips.length)
+      for (var i = 0; i < pageTrips.length; i++) allTrips.push(pageTrips[i])
       if (pageTrips.length < 100 || pageTrips.length === 0) {
         hasMore = false
       } else {
@@ -289,51 +282,67 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
       }
     }
 
-    $app
-      .logger()
-      .info(
-        'Datalbus: fetched all trips for period',
-        'totalTrips',
-        allTrips.length,
-        'pagesFetched',
-        page,
-      )
+    $app.logger().info('Datalbus: primary trips fetched', 'totalTrips', allTrips.length)
+    return allTrips
+  }
 
-    var matchedTrips = []
-    for (var m = 0; m < allTrips.length; m++) {
-      if (tripMatchesWorkerId(allTrips[m])) {
-        matchedTrips.push(allTrips[m])
+  function fetchTripsFallback(token) {
+    var allTrips = []
+    var page = 1
+    var hasMore = true
+
+    while (hasMore) {
+      var url =
+        'https://datalbus.com.br:8000/api/v2/trips?date=' +
+        encodeURIComponent(dataInicial) +
+        '&per_page=100&page=' +
+        page
+      var res = apiGet(url, token)
+      if (res.statusCode !== 200 || !res.json) {
+        $app
+          .logger()
+          .error('Datalbus: fallback trips failed', 'statusCode', res.statusCode, 'page', page)
+        hasMore = false
+        break
+      }
+      var pageTrips = extractArray(res.json)
+      $app
+        .logger()
+        .info('Datalbus: fallback trips page', 'page', page, 'tripsInPage', pageTrips.length)
+      for (var i = 0; i < pageTrips.length; i++) allTrips.push(pageTrips[i])
+      if (pageTrips.length < 100 || pageTrips.length === 0) {
+        hasMore = false
+      } else {
+        page++
       }
     }
 
+    var matched = []
+    for (var m = 0; m < allTrips.length; m++) {
+      if (tripMatchesWorkerId(allTrips[m])) matched.push(allTrips[m])
+    }
+
     $app
       .logger()
       .info(
-        'Datalbus: trips matched by subtrip worker_id',
+        'Datalbus: fallback trips matched by worker_id',
         'matchedTrips',
-        matchedTrips.length,
+        matched.length,
         'workerId',
         workerId,
       )
+    return matched
+  }
 
-    if (matchedTrips.length === 0) {
-      $app.logger().info('Datalbus: no trips matched worker_id in subtrips', 'workerId', workerId)
-      return []
-    }
-
-    var allEvents = []
-    for (var n = 0; n < matchedTrips.length; n++) {
-      var tripId = getTripId(matchedTrips[n])
-      if (!tripId) continue
-      var tripEvents = fetchEventsByTripId(tripId, token)
-      for (var p = 0; p < tripEvents.length; p++) allEvents.push(tripEvents[p])
-    }
-
-    $app
-      .logger()
-      .info('Datalbus: events collected from matched trips', 'totalEvents', allEvents.length)
-
-    return allEvents
+  function fetchScore(token) {
+    var url =
+      'https://datalbus.com.br:8000/api/v2/drivers/score?dtIni=' +
+      encodeURIComponent(dataInicial) +
+      '&dtFin=' +
+      encodeURIComponent(dataFinal) +
+      '&workerId[]=' +
+      workerId
+    return apiGet(url, token)
   }
 
   var datalbusToken = getCachedToken()
@@ -346,7 +355,6 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
   }
 
   var scoreRes = fetchScore(datalbusToken)
-
   if (scoreRes.statusCode === 401) {
     clearCachedToken()
     datalbusToken = authenticate()
@@ -356,25 +364,25 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
       return e.json(502, { error: 'Falha na autenticação com a DataBus' })
   }
 
-  var eventsList = fetchEvents(datalbusToken)
+  var trips = fetchTripsPrimary(datalbusToken)
+  if (!trips || trips.length === 0) {
+    $app.logger().info('Datalbus: primary endpoint returned no trips, falling back')
+    trips = fetchTripsFallback(datalbusToken)
+  }
 
-  var rawData = scoreRes.json || {}
+  $app.logger().info('Datalbus: total trips to process', 'totalTrips', trips.length)
 
-  var eventos = []
-  for (var i = 0; i < eventsList.length; i++) {
-    var ev = eventsList[i]
-    eventos.push({
-      data: String(
-        ev.event_date ||
-          ev.data ||
-          ev.date_time ||
-          ev.timestamp ||
-          ev.created_at ||
-          ev.datetime ||
-          ev.data_hora ||
-          '',
-      ),
-      tipo: String(
+  var allEvents = []
+  var pontuacao = null
+
+  for (var n = 0; n < trips.length; n++) {
+    var tripId = getTripId(trips[n])
+    if (!tripId) continue
+    var tripDate = getTripDate(trips[n])
+    var tripEvents = fetchEventsForTrip(tripId, tripDate, datalbusToken)
+    for (var p = 0; p < tripEvents.length; p++) {
+      var ev = tripEvents[p]
+      var tipo = String(
         ev.event_type_description ||
           ev.event_type ||
           ev.tipo ||
@@ -382,42 +390,91 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
           ev.event_name ||
           ev.descricao_evento ||
           '',
-      ),
-      veiculo: String(
-        ev.asset_id ||
-          ev.veiculo ||
-          ev.vehicle ||
-          ev.plate ||
-          ev.placa ||
-          ev.bus ||
-          ev.vehicle_plate ||
-          ev.prefixo ||
-          '',
-      ),
-      descricao: String(
-        ev.description ||
-          ev.descricao ||
-          ev.localizacao ||
-          ev.location ||
-          ev.address ||
-          ev.local ||
-          ev.place ||
-          '',
-      ),
-      duracao: ev.duration || ev.duracao || ev.duration_seconds || 0,
-      latitude: ev.latitude || ev.lat || 0,
-      longitude: ev.longitude || ev.lng || ev.lon || 0,
-    })
+      )
+
+      if (isTechnicalEvent(tipo)) continue
+
+      if (tipo === 'Pontuação do Motorista na Viagem') {
+        var scoreVal = ev.score || ev.pontuacao || ev.valor || ev.amount || ev.value
+        if (scoreVal !== undefined && scoreVal !== null && scoreVal !== '') {
+          pontuacao = parseFloat(String(scoreVal))
+          if (isNaN(pontuacao)) pontuacao = null
+        }
+        continue
+      }
+
+      allEvents.push({
+        data: String(
+          ev.time ||
+            ev.event_date ||
+            ev.data ||
+            ev.date_time ||
+            ev.timestamp ||
+            ev.created_at ||
+            ev.datetime ||
+            ev.data_hora ||
+            '',
+        ),
+        tipo: tipo,
+        veiculo: String(
+          ev.asset_id ||
+            ev.veiculo ||
+            ev.vehicle ||
+            ev.plate ||
+            ev.placa ||
+            ev.bus ||
+            ev.vehicle_plate ||
+            ev.prefixo ||
+            '',
+        ),
+        descricao: String(
+          ev.description ||
+            ev.descricao ||
+            ev.localizacao ||
+            ev.location ||
+            ev.address ||
+            ev.local ||
+            ev.place ||
+            '',
+        ),
+        duracao: ev.duration || ev.duracao || ev.duration_seconds || 0,
+        latitude: ev.latitude || ev.lat || 0,
+        longitude: ev.longitude || ev.lng || ev.lon || 0,
+        quantidade:
+          ev.amount !== undefined ? ev.amount : ev.quantidade !== undefined ? ev.quantidade : 0,
+      })
+    }
   }
+
+  $app
+    .logger()
+    .info('Datalbus: events collected', 'totalEvents', allEvents.length, 'pontuacao', pontuacao)
+
+  var eventos = allEvents
 
   var resumo = {}
   for (var j = 0; j < eventos.length; j++) {
-    var tipo = eventos[j].tipo
-    if (tipo) {
-      if (!resumo[tipo]) resumo[tipo] = 0
-      resumo[tipo]++
+    var t = eventos[j].tipo
+    if (t) {
+      if (!resumo[t]) resumo[t] = 0
+      resumo[t]++
     }
   }
+
+  var distanciaTotal = 0
+  var duracaoTotal = 0
+  for (var k = 0; k < trips.length; k++) {
+    var mileage = trips[k].mileage || trips[k].distancia || trips[k].km || 0
+    var driveDur =
+      trips[k].drive_duration || trips[k].duracao_direcao || trips[k].driving_duration || 0
+    var mileageNum = parseFloat(String(mileage))
+    if (!isNaN(mileageNum)) distanciaTotal += mileageNum
+    var driveDurNum = parseFloat(String(driveDur))
+    if (!isNaN(driveDurNum)) duracaoTotal += driveDurNum
+  }
+
+  var scoreData = scoreRes.json || {}
+  var finalPontuacao = pontuacao !== null ? pontuacao : scoreData
 
   $app
     .logger()
@@ -425,13 +482,24 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
       'Datalbus: telemetry success',
       'eventos',
       eventos.length,
+      'totalViagens',
+      trips.length,
+      'distanciaTotal',
+      distanciaTotal,
+      'duracaoTotal',
+      duracaoTotal,
       'resumoKeys',
       Object.keys(resumo).length,
     )
 
   return e.json(200, {
-    pontuacao: rawData,
+    pontuacao: finalPontuacao,
     eventos: eventos,
     resumo: resumo,
+    total_viagens: trips.length,
+    metricas: {
+      distancia_total: distanciaTotal,
+      duracao_total: duracaoTotal,
+    },
   })
 })
