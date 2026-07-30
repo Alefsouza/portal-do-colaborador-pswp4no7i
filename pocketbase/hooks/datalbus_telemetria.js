@@ -122,6 +122,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
   }
 
   function apiGet(url, token) {
+    $app.logger().info('Datalbus API request', 'url', url, 'method', 'GET')
     try {
       var res = $http.send({
         url: url,
@@ -133,13 +134,25 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
         },
         timeout: 30,
       })
+      var rawBody = String(res.body || '')
+      $app
+        .logger()
+        .info(
+          'Datalbus API response',
+          'url',
+          url,
+          'statusCode',
+          res.statusCode,
+          'body',
+          rawBody.substring(0, 2000),
+        )
       var parsed = null
       if (res.body) {
         try {
           parsed = res.json
         } catch (_) {}
       }
-      return { statusCode: res.statusCode, json: parsed, body: String(res.body || '') }
+      return { statusCode: res.statusCode, json: parsed, body: rawBody }
     } catch (err) {
       $app.logger().error('Datalbus GET error', 'message', err.message, 'url', url)
       return { statusCode: 0, json: null, body: '' }
@@ -171,7 +184,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
 
   function fetchEvents(token) {
     var primaryUrl =
-      'https://datalbus.com.br:8000/api/v2/trips/events/filtered?driver_id=' +
+      'https://datalbus.com.br:8000/api/v2/trips/events/filtered?worker_id=' +
       workerId +
       '&start_date=' +
       encodeURIComponent(dataInicial) +
@@ -192,7 +205,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
         res.statusCode,
       )
     var tripsUrl =
-      'https://datalbus.com.br:8000/api/v2/trips?driver_id=' +
+      'https://datalbus.com.br:8000/api/v2/trips?worker_id=' +
       workerId +
       '&start_date=' +
       encodeURIComponent(dataInicial) +
