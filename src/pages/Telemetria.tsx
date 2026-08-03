@@ -8,6 +8,7 @@ import {
   Route,
   Clock,
   MapPin,
+  Terminal,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,12 @@ import {
 import { fetchTelemetry, type TelemetryRecord, type TelemetryScore } from '@/services/telemetry'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 
 function toDateStr(date: Date): string {
   const y = date.getFullYear()
@@ -455,6 +462,80 @@ export default function Telemetria() {
                 <p className="text-slate-500">
                   Nenhum evento de <strong>direção</strong> registrado neste período.
                 </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {results.debug && sortedEvents.length === 0 && (
+            <Card className="border-slate-200">
+              <CardContent className="p-0">
+                <Accordion type="single" collapsible>
+                  <AccordionItem value="debug" className="border-0">
+                    <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                      <div className="flex items-center gap-2">
+                        <Terminal className="w-4 h-4 text-slate-500" />
+                        <span className="font-bold text-slate-900">Detalhes técnicos</span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-6 pb-4">
+                      <div className="space-y-4">
+                        {results.debug.calls && results.debug.calls.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-700 mb-2">
+                              Chamadas à API
+                            </h4>
+                            <div className="space-y-2">
+                              {results.debug.calls.map((call, idx) => (
+                                <div
+                                  key={idx}
+                                  className="bg-slate-50 rounded-lg p-3 border border-slate-100"
+                                >
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span
+                                      className={cn(
+                                        'text-xs font-bold px-2 py-0.5 rounded',
+                                        call.statusCode === 200
+                                          ? 'bg-green-100 text-green-700'
+                                          : 'bg-red-100 text-red-700',
+                                      )}
+                                    >
+                                      {call.statusCode}
+                                    </span>
+                                    <code className="text-xs text-slate-600 break-all">
+                                      {call.endpoint}
+                                    </code>
+                                  </div>
+                                  {call.responseFirstLine && (
+                                    <pre className="text-xs text-slate-500 mt-1 whitespace-pre-wrap break-all max-h-20 overflow-y-auto">
+                                      {call.responseFirstLine}
+                                    </pre>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {results.debug.errors && results.debug.errors.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-red-700 mb-2">Erros</h4>
+                            <div className="space-y-2">
+                              {results.debug.errors.map((err, idx) => (
+                                <div
+                                  key={idx}
+                                  className="bg-red-50 rounded-lg p-3 border border-red-100"
+                                >
+                                  <pre className="text-xs text-red-600 whitespace-pre-wrap break-all">
+                                    {JSON.stringify(err, null, 2)}
+                                  </pre>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </CardContent>
             </Card>
           )}

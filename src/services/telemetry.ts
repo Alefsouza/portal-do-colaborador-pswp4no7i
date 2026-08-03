@@ -37,14 +37,27 @@ export interface TelemetryError {
   error: string
 }
 
+export interface TelemetryDebugCall {
+  endpoint: string
+  params: Record<string, string>
+  statusCode: number
+  responseFirstLine: string
+}
+
+export interface TelemetryDebug {
+  calls: TelemetryDebugCall[]
+  errors: TelemetryError[]
+}
+
 export interface TelemetryRecord {
-  pontuacao: TelemetryScore | number
+  pontuacao: TelemetryScore | number | null
   eventos: TelemetryEvent[]
   resumo: Record<string, number>
   total_viagens: number
   metricas: TelemetryMetricas
   partialData?: boolean
   errors?: TelemetryError[]
+  debug?: TelemetryDebug
 }
 
 export interface TelemetryQuery {

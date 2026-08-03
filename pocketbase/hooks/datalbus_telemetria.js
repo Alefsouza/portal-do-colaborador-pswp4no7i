@@ -58,6 +58,11 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return e.json(500, { error: 'Credenciais do DataBus não configuradas.' })
   }
 
+  var debugCalls = []
+  var debugErrors = []
+  var authFailed = false
+  var currentToken = ''
+
   try {
     $app
       .db()
@@ -127,6 +132,38 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return token
   }
 
+  function extractParams(url) {
+    var params = {}
+    var qIdx = url.indexOf('?')
+    if (qIdx >= 0) {
+      var pairs = url.substring(qIdx + 1).split('&')
+      for (var i = 0; i < pairs.length; i++) {
+        var eqIdx = pairs[i].indexOf('=')
+        if (eqIdx >= 0) {
+          params[decodeURIComponent(pairs[i].substring(0, eqIdx))] = decodeURIComponent(
+            pairs[i].substring(eqIdx + 1),
+          )
+        }
+      }
+    }
+    return params
+  }
+
+  function getResponsePreview(json, body) {
+    var s = ''
+    if (json) {
+      try {
+        s = JSON.stringify(json)
+      } catch (_) {
+        s = ''
+      }
+    }
+    if (!s && body) {
+      s = String(body)
+    }
+    return s ? s.substring(0, 300) : ''
+  }
+
   function apiGet(url, token) {
     try {
       var res = $http.send({
@@ -145,10 +182,41 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
           parsed = res.json
         } catch (_) {}
       }
+      debugCalls.push({
+        endpoint: url,
+        params: extractParams(url),
+        statusCode: res.statusCode,
+        responseFirstLine: getResponsePreview(parsed, res.body),
+      })
       return { statusCode: res.statusCode, json: parsed, body: String(res.body || '') }
     } catch (err) {
+      debugCalls.push({
+        endpoint: url,
+        params: extractParams(url),
+        statusCode: 0,
+        responseFirstLine: 'Transport error: ' + (err.message || ''),
+      })
       return { statusCode: 0, json: null, body: '' }
     }
+  }
+
+  function apiGetWithRetry(url) {
+    var res = apiGet(url, currentToken)
+    if (res.statusCode === 401) {
+      clearCachedToken()
+      currentToken = authenticate()
+      if (!currentToken) {
+        debugErrors.push({ endpoint: url, error: 'Re-autenticação falhou após 401' })
+        authFailed = true
+        return res
+      }
+      res = apiGet(url, currentToken)
+      if (res.statusCode === 401) {
+        debugErrors.push({ endpoint: url, error: 'Segunda tentativa também retornou 401' })
+        authFailed = true
+      }
+    }
+    return res
   }
 
   function extractArray(data) {
@@ -164,17 +232,14 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return []
   }
 
-  var TECHNICAL_EVENTS = {
-    'Histograma Acelerômetro': true,
-    'Histograma de tensão do alternador': true,
-    'Histograma do acelerador': true,
-    'Histograma de uso do freio motor': true,
-    'Sumario de uso do Retarder': true,
-    'Utilização do Neutro Automático': true,
-  }
   function isTechnicalEvent(tipo) {
-    return !!TECHNICAL_EVENTS[tipo]
+    var l = String(tipo).toLowerCase()
+    if (l.indexOf('histograma') === 0) return true
+    if (l.indexOf('sumario') >= 0 && l.indexOf('retarder') >= 0) return true
+    if (l.indexOf('neutro') >= 0) return true
+    return false
   }
+
   function getTripId(trip) {
     return trip.id || trip.trip_id || trip.tripId || ''
   }
@@ -197,8 +262,9 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return false
   }
 
-  function fetchEventsForTrip(trip, token) {
+  function fetchEventsForTrip(trip) {
     var tripId = getTripId(trip)
+    var tripDate = getTripDate(trip)
     if (!tripId) return { events: [], error: 'No trip ID', tripId: tripId }
     var events = []
     var page = 1
@@ -206,14 +272,16 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     var MAX_PAGES = 5
     var baseUrl =
       'https://datalbus.com.br:8000/api/v2/trips/' + encodeURIComponent(String(tripId)) + '/events'
-
+    var separator = '?'
+    if (tripDate) {
+      baseUrl += '?date=' + encodeURIComponent(tripDate)
+      separator = '&'
+    }
     while (hasMore) {
       if (Date.now() > globalDeadline)
         return { events: events, error: 'Global timeout reached', tripId: tripId }
-      var separator = baseUrl.indexOf('?') >= 0 ? '&' : '?'
       var url = baseUrl + separator + 'per_page=100&page=' + page
-      var res = apiGet(url, token)
-      console.log('[telemetria] trip ' + tripId + ' page ' + page + ' HTTP ' + res.statusCode)
+      var res = apiGetWithRetry(url)
       if (res.statusCode !== 200 || !res.json)
         return { events: events, error: 'API error: ' + res.statusCode, tripId: tripId }
       var pageEvents = extractArray(res.json)
@@ -221,26 +289,25 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       if (pageEvents.length < 100 || pageEvents.length === 0 || page >= MAX_PAGES) hasMore = false
       else page++
     }
-    console.log('[telemetria] trip ' + tripId + ' returned ' + events.length + ' events')
     return { events: events, error: null, tripId: tripId }
   }
 
-  function fetchTripsPrimary(token) {
+  function fetchTripsPrimary() {
     var allTrips = []
     var page = 1
     var MAX_PAGES = 10
     while (page <= MAX_PAGES) {
       if (Date.now() > globalDeadline) break
       var url =
-        'https://datalbus.com.br:8000/api/v2/trips?worker_id=' +
+        'https://datalbus.com.br:8000/api/v2/trips?workerId[]=' +
         encodeURIComponent(String(workerId)) +
-        '&dtIni=' +
+        '&start_date=' +
         encodeURIComponent(dataInicial) +
-        '&dtFin=' +
+        '&end_date=' +
         encodeURIComponent(dataFinal) +
         '&per_page=100&page=' +
         page
-      var res = apiGet(url, token)
+      var res = apiGetWithRetry(url)
       if (res.statusCode !== 200 || !res.json) return null
       var pageTrips = extractArray(res.json)
       for (var i = 0; i < pageTrips.length; i++) allTrips.push(pageTrips[i])
@@ -250,18 +317,20 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return allTrips
   }
 
-  function fetchTripsFallback(token) {
+  function fetchTripsFallback() {
     var allTrips = []
     var page = 1
     var MAX_PAGES = 10
     while (page <= MAX_PAGES) {
       if (Date.now() > globalDeadline) break
       var url =
-        'https://datalbus.com.br:8000/api/v2/trips?date=' +
+        'https://datalbus.com.br:8000/api/v2/trips?start_date=' +
         encodeURIComponent(dataInicial) +
+        '&end_date=' +
+        encodeURIComponent(dataFinal) +
         '&per_page=100&page=' +
         page
-      var res = apiGet(url, token)
+      var res = apiGetWithRetry(url)
       if (res.statusCode !== 200 || !res.json) break
       var pageTrips = extractArray(res.json)
       for (var i = 0; i < pageTrips.length; i++) allTrips.push(pageTrips[i])
@@ -275,7 +344,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return matched
   }
 
-  function fetchScore(token) {
+  function fetchScore() {
     var url =
       'https://datalbus.com.br:8000/api/v2/drivers/score?dtIni=' +
       encodeURIComponent(dataInicial) +
@@ -283,32 +352,52 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       encodeURIComponent(dataFinal) +
       '&workerId[]=' +
       workerId
-    return apiGet(url, token)
+    return apiGetWithRetry(url)
   }
 
   try {
-    var datalbusToken = getCachedToken()
-    if (!datalbusToken) {
-      datalbusToken = authenticate()
-      if (!datalbusToken) return e.json(502, { error: 'Erro de autenticação com a API DataBus.' })
+    currentToken = getCachedToken()
+    if (!currentToken) {
+      currentToken = authenticate()
+      if (!currentToken) return e.json(502, { error: 'Erro de autenticação com a API DataBus.' })
     }
 
-    var scoreRes = fetchScore(datalbusToken)
-    if (scoreRes.statusCode === 401) {
-      clearCachedToken()
-      datalbusToken = authenticate()
-      if (!datalbusToken) return e.json(502, { error: 'Falha na autenticação com a DataBus' })
-      scoreRes = fetchScore(datalbusToken)
+    var scoreRes = fetchScore()
+    if (authFailed) {
+      return e.json(502, {
+        error: 'Falha na autenticação com a DataBus após re-tentativa.',
+        debug: { calls: debugCalls, errors: debugErrors },
+      })
     }
 
-    var trips = fetchTripsPrimary(datalbusToken)
-    if (!trips || trips.length === 0) trips = fetchTripsFallback(datalbusToken)
+    var trips = fetchTripsPrimary()
+    if (authFailed) {
+      return e.json(502, {
+        error: 'Falha na autenticação com a DataBus após re-tentativa.',
+        debug: { calls: debugCalls, errors: debugErrors },
+      })
+    }
+    if (!trips || trips.length === 0) trips = fetchTripsFallback()
+    if (authFailed) {
+      return e.json(502, {
+        error: 'Falha na autenticação com a DataBus após re-tentativa.',
+        debug: { calls: debugCalls, errors: debugErrors },
+      })
+    }
     if (!trips) trips = []
 
-    console.log('[telemetria] total trips found: ' + trips.length)
-    var tripIdsLog = []
-    for (var ti = 0; ti < trips.length; ti++) tripIdsLog.push(getTripId(trips[ti]))
-    console.log('[telemetria] trip IDs being processed: ' + tripIdsLog.join(', '))
+    if (trips.length === 0) {
+      return e.json(200, {
+        pontuacao: null,
+        eventos: [],
+        resumo: {},
+        total_viagens: 0,
+        metricas: { distancia_total: 0, duracao_total: 0, total_viagens: 0 },
+        partialData: false,
+        errors: [],
+        debug: { calls: debugCalls, errors: debugErrors },
+      })
+    }
 
     trips.sort(function (a, b) {
       return getTripDate(b).localeCompare(getTripDate(a))
@@ -326,16 +415,17 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     for (var i = 0; i < trips.length; i++) {
       if (Date.now() > globalDeadline) {
         partialData = true
-        for (var j = i; j < trips.length; j++)
-          errors.push({ tripId: getTripId(trips[j]), error: 'Skipped due to global timeout' })
+        for (var j = i; j < trips.length; j++) {
+          var skipId = getTripId(trips[j])
+          errors.push({ tripId: skipId, error: 'Skipped due to global timeout' })
+          debugErrors.push({ tripId: skipId, error: 'Skipped due to global timeout' })
+        }
         break
       }
-      var result = fetchEventsForTrip(trips[i], datalbusToken)
+      var result = fetchEventsForTrip(trips[i])
       if (result.error) {
-        errors.push({
-          tripId: result.tripId || getTripId(trips[i]),
-          error: result.error,
-        })
+        errors.push({ tripId: result.tripId || getTripId(trips[i]), error: result.error })
+        debugErrors.push({ tripId: result.tripId || getTripId(trips[i]), error: result.error })
       }
       if (result.events && result.events.length > 0) {
         for (var p = 0; p < result.events.length; p++) allRawEvents.push(result.events[p])
@@ -357,8 +447,11 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
           ev.descricao_evento ||
           '',
       )
+
       if (isTechnicalEvent(tipo)) continue
-      if (tipo === 'Pontuação do Motorista na Viagem') {
+
+      var tipoLower = tipo.toLowerCase()
+      if (tipoLower.indexOf('pontuacao') >= 0 || tipoLower.indexOf('pontuação') >= 0) {
         var scoreVal = ev.score || ev.pontuacao || ev.valor || ev.amount || ev.value
         if (scoreVal !== undefined && scoreVal !== null && scoreVal !== '') {
           pontuacao = parseFloat(String(scoreVal))
@@ -366,6 +459,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         }
         continue
       }
+
       eventos.push({
         data: String(
           ev.time ||
@@ -432,7 +526,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       if (!isNaN(driveDurNum)) duracaoTotal += driveDurNum
     }
 
-    var finalPontuacao = pontuacao !== null ? pontuacao : scoreRes.json || {}
+    var finalPontuacao = pontuacao !== null ? pontuacao : scoreRes.json || null
 
     return e.json(200, {
       pontuacao: finalPontuacao,
@@ -442,11 +536,13 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       metricas: { distancia_total: distanciaTotal, duracao_total: duracaoTotal },
       partialData: partialData,
       errors: errors,
+      debug: { calls: debugCalls, errors: debugErrors },
     })
   } catch (err) {
     $app.logger().error('Datalbus telemetry unexpected error', 'message', String(err))
     return e.json(502, {
       error: 'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.',
+      debug: { calls: debugCalls, errors: debugErrors },
     })
   }
 })
