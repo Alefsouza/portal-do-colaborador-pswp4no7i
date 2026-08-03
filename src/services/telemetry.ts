@@ -34,8 +34,9 @@ export interface TelemetryMetricas {
 }
 
 export interface TelemetryError {
-  tripId: string
+  tripId?: string
   error: string
+  detail?: string
 }
 
 export interface TelemetryDebugCall {
@@ -48,6 +49,8 @@ export interface TelemetryDebugCall {
 export interface TelemetryDebug {
   calls: TelemetryDebugCall[]
   errors: TelemetryError[]
+  worker_id?: string | number
+  pages_traversed?: number
 }
 
 export interface TelemetryRecord {

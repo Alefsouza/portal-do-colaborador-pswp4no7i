@@ -48,7 +48,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
   var SCORE_TIMEOUT = 25
   var GLOBAL_TIMEOUT_MS = 90000
   var MAX_TRIPS = 5
-  var MAX_PAGES = 5
+  var MAX_PAGES = 50
   var globalDeadline = Date.now() + GLOBAL_TIMEOUT_MS
 
   var datalbusEmail = $secrets.get('DATALBUS_EMAIL') || ''
@@ -65,6 +65,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
   var debugErrors = []
   var authFailed = false
   var currentToken = ''
+  var pagesTraversed = 0
 
   try {
     $app
@@ -275,14 +276,82 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return s
   }
 
+  function logTripFields(trips, context) {
+    if (!trips || trips.length === 0) return
+    var firstTrip = trips[0]
+    var fieldKeys = []
+    for (var k in firstTrip) {
+      if (Object.prototype.hasOwnProperty.call(firstTrip, k)) fieldKeys.push(k)
+    }
+    $app.logger().info('Datalbus trip fields', 'context', context, 'fields', fieldKeys.join(', '))
+    $app
+      .logger()
+      .info(
+        'Datalbus trip worker values',
+        'context',
+        context,
+        'worker_id',
+        String(firstTrip.worker_id || ''),
+        'workerId',
+        String(firstTrip.workerId || ''),
+        'worker_id_int',
+        String(firstTrip.worker_id_int || ''),
+        'driver_id',
+        String(firstTrip.driver_id || ''),
+        'driverId',
+        String(firstTrip.driverId || ''),
+        'driver_worker_id',
+        String(firstTrip.driver_worker_id || ''),
+      )
+    if (firstTrip.subtrips && Array.isArray(firstTrip.subtrips) && firstTrip.subtrips.length > 0) {
+      var subKeys = []
+      for (var sk in firstTrip.subtrips[0]) {
+        if (Object.prototype.hasOwnProperty.call(firstTrip.subtrips[0], sk)) subKeys.push(sk)
+      }
+      $app
+        .logger()
+        .info('Datalbus subtrip fields', 'context', context, 'subFields', subKeys.join(', '))
+      $app
+        .logger()
+        .info(
+          'Datalbus subtrip worker values',
+          'context',
+          context,
+          'worker_id',
+          String(firstTrip.subtrips[0].worker_id || ''),
+          'workerId',
+          String(firstTrip.subtrips[0].workerId || ''),
+          'driver_id',
+          String(firstTrip.subtrips[0].driver_id || ''),
+        )
+    }
+  }
+
   function tripMatchesWorkerId(trip) {
+    var tripWorkerStr = String(
+      trip.worker_id ||
+        trip.workerId ||
+        trip.worker_id_int ||
+        trip.driver_id ||
+        trip.driverId ||
+        trip.driver_worker_id ||
+        '',
+    )
+    var tripWorkerNum = parseInt(tripWorkerStr, 10)
+    if (!isNaN(tripWorkerNum) && tripWorkerNum === workerId) return true
+
     var subtrips = trip.subtrips || trip.sub_trips || trip.subTrips || []
     if (!Array.isArray(subtrips)) return false
     for (var s = 0; s < subtrips.length; s++) {
-      var subWorkerNum = parseInt(
-        String(subtrips[s].worker_id || subtrips[s].workerId || subtrips[s].worker_id_int || ''),
-        10,
+      var subWorkerStr = String(
+        subtrips[s].worker_id ||
+          subtrips[s].workerId ||
+          subtrips[s].worker_id_int ||
+          subtrips[s].driver_id ||
+          subtrips[s].driverId ||
+          '',
       )
+      var subWorkerNum = parseInt(subWorkerStr, 10)
       if (!isNaN(subWorkerNum) && subWorkerNum === workerId) return true
     }
     return false
@@ -337,11 +406,13 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       '&date=' +
       encodeURIComponent(dateStr) +
       '&per_page=100&page=1'
+    pagesTraversed++
     var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
     if (res.statusCode !== 200 || !res.json) {
       return { supported: false, trips: [] }
     }
     var trips = extractArray(res.json)
+    if (trips.length > 0) logTripFields(trips, 'tryWorkerIdFilter')
     if (trips.length > 0 && !tripMatchesWorkerId(trips[0])) {
       return { supported: false, trips: trips }
     }
@@ -361,6 +432,14 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     for (var d = 0; d < dates.length; d++) {
       if (Date.now() > globalDeadline) {
         partialData = true
+        errors.push({
+          error: 'Skipped due to global timeout',
+          detail: 'Date ' + dates[d] + ' and remaining dates not processed',
+        })
+        debugErrors.push({
+          error: 'Skipped due to global timeout',
+          detail: 'Date ' + dates[d] + ' and remaining dates not processed',
+        })
         break
       }
       if (matchedTrips.length >= MAX_TRIPS) break
@@ -397,9 +476,11 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
                 encodeURIComponent(dateStr) +
                 '&per_page=100&page=' +
                 wPage
+              pagesTraversed++
               var wRes = apiGetWithRetry(wUrl, TRIPS_TIMEOUT)
               if (wRes.statusCode !== 200 || !wRes.json) break
               var wTrips = extractArray(wRes.json)
+              if (wTrips.length > 0) logTripFields(wTrips, 'workerIdFilter-wPage-' + wPage)
               for (var wt = 0; wt < wTrips.length; wt++) {
                 if (matchedTrips.length >= MAX_TRIPS) break
                 if (Date.now() > globalDeadline) {
@@ -432,9 +513,11 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
             encodeURIComponent(dateStr) +
             '&per_page=100&page=' +
             fPage
+          pagesTraversed++
           var fRes = apiGetWithRetry(fUrl, TRIPS_TIMEOUT)
           if (fRes.statusCode !== 200 || !fRes.json) break
           var fTrips = extractArray(fRes.json)
+          if (fTrips.length > 0) logTripFields(fTrips, 'workerIdFilter-fPage-' + fPage)
           for (var ft = 0; ft < fTrips.length; ft++) {
             if (matchedTrips.length >= MAX_TRIPS) break
             if (Date.now() > globalDeadline) {
@@ -462,9 +545,12 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
             encodeURIComponent(dateStr) +
             '&per_page=100&page=' +
             page
+          pagesTraversed++
           var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
           if (res.statusCode !== 200 || !res.json) break
           var pageTrips = extractArray(res.json)
+          if (page === 1 && pageTrips.length > 0)
+            logTripFields(pageTrips, 'dateSearch-page1-' + dateStr)
 
           for (var i = 0; i < pageTrips.length; i++) {
             if (matchedTrips.length >= MAX_TRIPS) break
@@ -545,7 +631,12 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         metricas: { distancia_total: 0, duracao_total: 0, total_viagens: 0 },
         partialData: false,
         errors: errors,
-        debug: { calls: debugCalls, errors: debugErrors },
+        debug: {
+          calls: debugCalls,
+          errors: debugErrors,
+          worker_id: workerId,
+          pages_traversed: pagesTraversed,
+        },
       })
     }
 
@@ -659,13 +750,23 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       metricas: { distancia_total: distanciaTotal, duracao_total: duracaoTotal },
       partialData: partialData,
       errors: errors,
-      debug: { calls: debugCalls, errors: debugErrors },
+      debug: {
+        calls: debugCalls,
+        errors: debugErrors,
+        worker_id: workerId,
+        pages_traversed: pagesTraversed,
+      },
     })
   } catch (err) {
     $app.logger().error('Datalbus telemetry unexpected error', 'message', String(err))
     return e.json(502, {
       error: 'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.',
-      debug: { calls: debugCalls, errors: debugErrors },
+      debug: {
+        calls: debugCalls,
+        errors: debugErrors,
+        worker_id: workerId,
+        pages_traversed: pagesTraversed,
+      },
     })
   }
 })

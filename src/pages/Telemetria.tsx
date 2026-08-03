@@ -381,7 +381,7 @@ export default function Telemetria() {
             </Card>
           )}
 
-          {allResumoKeys.length > 0 && (
+          {totalViagens > 0 && allResumoKeys.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {allResumoKeys.map((tipo) => (
                 <Badge
@@ -460,8 +460,16 @@ export default function Telemetria() {
             <Card className="border-slate-200">
               <CardContent className="py-12 text-center">
                 <p className="text-slate-500">
-                  Nenhum evento de <strong>direção</strong> registrado neste período.
+                  {totalViagens === 0
+                    ? 'Nenhuma viagem encontrada para este colaborador no período.'
+                    : 'Nenhum evento de direção registrado neste período.'}
                 </p>
+                {totalViagens === 0 && (
+                  <p className="text-sm text-slate-400 mt-2">
+                    Worker ID: {workerId} | Páginas consultadas:{' '}
+                    {results.debug?.pages_traversed ?? 0}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -479,6 +487,17 @@ export default function Telemetria() {
                     </AccordionTrigger>
                     <AccordionContent className="px-6 pb-4">
                       <div className="space-y-4">
+                        <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                          <div className="flex flex-wrap gap-4 text-sm">
+                            <span className="text-slate-600">
+                              <strong>Worker ID:</strong> {results.debug.worker_id ?? '-'}
+                            </span>
+                            <span className="text-slate-600">
+                              <strong>Páginas consultadas:</strong>{' '}
+                              {results.debug.pages_traversed ?? 0}
+                            </span>
+                          </div>
+                        </div>
                         {results.debug.calls && results.debug.calls.length > 0 && (
                           <div>
                             <h4 className="text-sm font-semibold text-slate-700 mb-2">
