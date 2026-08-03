@@ -44,6 +44,8 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
   }
 
   var API_TIMEOUT = 15
+  var TRIPS_TIMEOUT = 25
+  var SCORE_TIMEOUT = 25
   var GLOBAL_TIMEOUT_MS = 55000
   var MAX_TRIPS = 40
   var globalDeadline = Date.now() + GLOBAL_TIMEOUT_MS
@@ -164,7 +166,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return s ? s.substring(0, 300) : ''
   }
 
-  function apiGet(url, token) {
+  function apiGet(url, token, timeout) {
     try {
       var res = $http.send({
         url: url,
@@ -174,7 +176,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
           'X-Tenancy': datalbusXTenancy,
           Accept: 'application/json',
         },
-        timeout: API_TIMEOUT,
+        timeout: timeout || API_TIMEOUT,
       })
       var parsed = null
       if (res.body) {
@@ -200,8 +202,8 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     }
   }
 
-  function apiGetWithRetry(url) {
-    var res = apiGet(url, currentToken)
+  function apiGetWithRetry(url, timeout) {
+    var res = apiGet(url, currentToken, timeout)
     if (res.statusCode === 401) {
       clearCachedToken()
       currentToken = authenticate()
@@ -210,7 +212,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         authFailed = true
         return res
       }
-      res = apiGet(url, currentToken)
+      res = apiGet(url, currentToken, timeout)
       if (res.statusCode === 401) {
         debugErrors.push({ endpoint: url, error: 'Segunda tentativa também retornou 401' })
         authFailed = true
@@ -240,13 +242,36 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     return false
   }
 
+  function pad2(n) {
+    return n < 10 ? '0' + n : String(n)
+  }
+
+  function getDatesInRange(start, end) {
+    var dates = []
+    var current = new Date(start + 'T00:00:00')
+    var endDate = new Date(end + 'T00:00:00')
+    while (current <= endDate) {
+      dates.push(
+        current.getFullYear() + '-' + pad2(current.getMonth() + 1) + '-' + pad2(current.getDate()),
+      )
+      current.setDate(current.getDate() + 1)
+    }
+    return dates
+  }
+
   function getTripId(trip) {
     return trip.id || trip.trip_id || trip.tripId || ''
   }
+
   function getTripDate(trip) {
-    var d = trip.date || trip.data || trip.data_viagem || trip.start_date || ''
+    var d = trip._queryDate || trip.date || trip.data || trip.data_viagem || trip.start_date || ''
     if (!d) return ''
-    return String(d).split('T')[0] || ''
+    var s = String(d)
+    var tIdx = s.indexOf('T')
+    if (tIdx >= 0) return s.substring(0, tIdx)
+    var spIdx = s.indexOf(' ')
+    if (spIdx >= 0) return s.substring(0, spIdx)
+    return s
   }
 
   function tripMatchesWorkerId(trip) {
@@ -281,7 +306,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       if (Date.now() > globalDeadline)
         return { events: events, error: 'Global timeout reached', tripId: tripId }
       var url = baseUrl + separator + 'per_page=100&page=' + page
-      var res = apiGetWithRetry(url)
+      var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
       if (res.statusCode !== 200 || !res.json)
         return { events: events, error: 'API error: ' + res.statusCode, tripId: tripId }
       var pageEvents = extractArray(res.json)
@@ -294,48 +319,62 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
 
   function fetchTripsPrimary() {
     var allTrips = []
-    var page = 1
-    var MAX_PAGES = 10
-    while (page <= MAX_PAGES) {
+    var dates = getDatesInRange(dataInicial, dataFinal)
+    for (var d = 0; d < dates.length; d++) {
       if (Date.now() > globalDeadline) break
-      var url =
-        'https://datalbus.com.br:8000/api/v2/trips?workerId[]=' +
-        encodeURIComponent(String(workerId)) +
-        '&start_date=' +
-        encodeURIComponent(dataInicial) +
-        '&end_date=' +
-        encodeURIComponent(dataFinal) +
-        '&per_page=100&page=' +
-        page
-      var res = apiGetWithRetry(url)
-      if (res.statusCode !== 200 || !res.json) return null
-      var pageTrips = extractArray(res.json)
-      for (var i = 0; i < pageTrips.length; i++) allTrips.push(pageTrips[i])
-      if (pageTrips.length < 100 || pageTrips.length === 0) break
-      page++
+      var dateStr = dates[d]
+      var page = 1
+      var MAX_PAGES = 10
+      while (page <= MAX_PAGES) {
+        if (Date.now() > globalDeadline) break
+        var url =
+          'https://datalbus.com.br:8000/api/v2/trips?date=' +
+          encodeURIComponent(dateStr) +
+          '&per_page=100&page=' +
+          page
+        var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
+        if (res.statusCode !== 200 || !res.json) break
+        var pageTrips = extractArray(res.json)
+        for (var i = 0; i < pageTrips.length; i++) {
+          pageTrips[i]._queryDate = dateStr
+          allTrips.push(pageTrips[i])
+        }
+        if (pageTrips.length < 100 || pageTrips.length === 0) break
+        page++
+      }
     }
-    return allTrips
+    var matched = []
+    for (var m = 0; m < allTrips.length; m++) {
+      if (tripMatchesWorkerId(allTrips[m])) matched.push(allTrips[m])
+    }
+    return matched
   }
 
   function fetchTripsFallback() {
     var allTrips = []
-    var page = 1
-    var MAX_PAGES = 10
-    while (page <= MAX_PAGES) {
+    var dates = getDatesInRange(dataInicial, dataFinal)
+    for (var d = 0; d < dates.length; d++) {
       if (Date.now() > globalDeadline) break
-      var url =
-        'https://datalbus.com.br:8000/api/v2/trips?start_date=' +
-        encodeURIComponent(dataInicial) +
-        '&end_date=' +
-        encodeURIComponent(dataFinal) +
-        '&per_page=100&page=' +
-        page
-      var res = apiGetWithRetry(url)
-      if (res.statusCode !== 200 || !res.json) break
-      var pageTrips = extractArray(res.json)
-      for (var i = 0; i < pageTrips.length; i++) allTrips.push(pageTrips[i])
-      if (pageTrips.length < 100 || pageTrips.length === 0) break
-      page++
+      var dateStr = dates[d]
+      var page = 1
+      var MAX_PAGES = 10
+      while (page <= MAX_PAGES) {
+        if (Date.now() > globalDeadline) break
+        var url =
+          'https://datalbus.com.br:8000/api/v2/trips?date=' +
+          encodeURIComponent(dateStr) +
+          '&per_page=100&page=' +
+          page
+        var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
+        if (res.statusCode !== 200 || !res.json) break
+        var pageTrips = extractArray(res.json)
+        for (var i = 0; i < pageTrips.length; i++) {
+          pageTrips[i]._queryDate = dateStr
+          allTrips.push(pageTrips[i])
+        }
+        if (pageTrips.length < 100 || pageTrips.length === 0) break
+        page++
+      }
     }
     var matched = []
     for (var m = 0; m < allTrips.length; m++) {
@@ -352,7 +391,15 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       encodeURIComponent(dataFinal) +
       '&workerId[]=' +
       workerId
-    return apiGetWithRetry(url)
+    var res = apiGetWithRetry(url, SCORE_TIMEOUT)
+    if (res.statusCode !== 200 || !res.json) {
+      debugErrors.push({
+        endpoint: url,
+        error: 'Score request failed with status ' + res.statusCode,
+      })
+      return null
+    }
+    return res
   }
 
   try {
@@ -363,21 +410,9 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     }
 
     var scoreRes = fetchScore()
-    if (authFailed) {
-      return e.json(502, {
-        error: 'Falha na autenticação com a DataBus após re-tentativa.',
-        debug: { calls: debugCalls, errors: debugErrors },
-      })
-    }
+    authFailed = false
 
     var trips = fetchTripsPrimary()
-    if (authFailed) {
-      return e.json(502, {
-        error: 'Falha na autenticação com a DataBus após re-tentativa.',
-        debug: { calls: debugCalls, errors: debugErrors },
-      })
-    }
-    if (!trips || trips.length === 0) trips = fetchTripsFallback()
     if (authFailed) {
       return e.json(502, {
         error: 'Falha na autenticação com a DataBus após re-tentativa.',
@@ -526,7 +561,8 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       if (!isNaN(driveDurNum)) duracaoTotal += driveDurNum
     }
 
-    var finalPontuacao = pontuacao !== null ? pontuacao : scoreRes.json || null
+    var finalPontuacao =
+      pontuacao !== null ? pontuacao : scoreRes && scoreRes.json ? scoreRes.json : null
 
     return e.json(200, {
       pontuacao: finalPontuacao,

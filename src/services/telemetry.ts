@@ -30,6 +30,7 @@ export interface TelemetryScore {
 export interface TelemetryMetricas {
   distancia_total: number
   duracao_total: number
+  total_viagens?: number
 }
 
 export interface TelemetryError {
