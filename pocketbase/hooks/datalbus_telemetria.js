@@ -44,10 +44,11 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
   }
 
   var API_TIMEOUT = 15
-  var TRIPS_TIMEOUT = 25
+  var TRIPS_TIMEOUT = 15
   var SCORE_TIMEOUT = 25
-  var GLOBAL_TIMEOUT_MS = 55000
-  var MAX_TRIPS = 40
+  var GLOBAL_TIMEOUT_MS = 90000
+  var MAX_TRIPS = 5
+  var MAX_PAGES = 5
   var globalDeadline = Date.now() + GLOBAL_TIMEOUT_MS
 
   var datalbusEmail = $secrets.get('DATALBUS_EMAIL') || ''
@@ -294,7 +295,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     var events = []
     var page = 1
     var hasMore = true
-    var MAX_PAGES = 5
+    var MAX_EVENT_PAGES = 1
     var baseUrl =
       'https://datalbus.com.br:8000/api/v2/trips/' + encodeURIComponent(String(tripId)) + '/events'
     var separator = '?'
@@ -311,76 +312,186 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         return { events: events, error: 'API error: ' + res.statusCode, tripId: tripId }
       var pageEvents = extractArray(res.json)
       for (var j = 0; j < pageEvents.length; j++) events.push(pageEvents[j])
-      if (pageEvents.length < 100 || pageEvents.length === 0 || page >= MAX_PAGES) hasMore = false
+      if (pageEvents.length < 100 || pageEvents.length === 0 || page >= MAX_EVENT_PAGES)
+        hasMore = false
       else page++
     }
     return { events: events, error: null, tripId: tripId }
   }
 
-  function fetchTripsPrimary() {
-    var allTrips = []
-    var dates = getDatesInRange(dataInicial, dataFinal)
-    for (var d = 0; d < dates.length; d++) {
-      if (Date.now() > globalDeadline) break
-      var dateStr = dates[d]
-      var page = 1
-      var MAX_PAGES = 10
-      while (page <= MAX_PAGES) {
-        if (Date.now() > globalDeadline) break
-        var url =
-          'https://datalbus.com.br:8000/api/v2/trips?date=' +
-          encodeURIComponent(dateStr) +
-          '&per_page=100&page=' +
-          page
-        var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
-        if (res.statusCode !== 200 || !res.json) break
-        var pageTrips = extractArray(res.json)
-        for (var i = 0; i < pageTrips.length; i++) {
-          pageTrips[i]._queryDate = dateStr
-          allTrips.push(pageTrips[i])
-        }
-        if (pageTrips.length < 100 || pageTrips.length === 0) break
-        page++
-      }
+  function processTripEvents(trip, matchedTrips, allRawEvents, errors) {
+    var result = fetchEventsForTrip(trip)
+    if (result.error) {
+      errors.push({ tripId: result.tripId || getTripId(trip), error: result.error })
+      debugErrors.push({ tripId: result.tripId || getTripId(trip), error: result.error })
     }
-    var matched = []
-    for (var m = 0; m < allTrips.length; m++) {
-      if (tripMatchesWorkerId(allTrips[m])) matched.push(allTrips[m])
+    if (result.events && result.events.length > 0) {
+      for (var p = 0; p < result.events.length; p++) allRawEvents.push(result.events[p])
     }
-    return matched
   }
 
-  function fetchTripsFallback() {
-    var allTrips = []
+  function tryWorkerIdFilter(dateStr) {
+    var url =
+      'https://datalbus.com.br:8000/api/v2/trips?worker_id=' +
+      encodeURIComponent(String(workerId)) +
+      '&date=' +
+      encodeURIComponent(dateStr) +
+      '&per_page=100&page=1'
+    var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
+    if (res.statusCode !== 200 || !res.json) {
+      return { supported: false, trips: [] }
+    }
+    var trips = extractArray(res.json)
+    if (trips.length > 0 && !tripMatchesWorkerId(trips[0])) {
+      return { supported: false, trips: trips }
+    }
+    return { supported: true, trips: trips }
+  }
+
+  function fetchTripsAndEvents() {
+    var matchedTrips = []
+    var allRawEvents = []
+    var errors = []
+    var partialData = false
+    var workerIdFilterTested = false
+    var workerIdFilterSupported = false
+
     var dates = getDatesInRange(dataInicial, dataFinal)
+
     for (var d = 0; d < dates.length; d++) {
-      if (Date.now() > globalDeadline) break
+      if (Date.now() > globalDeadline) {
+        partialData = true
+        break
+      }
+      if (matchedTrips.length >= MAX_TRIPS) break
+
       var dateStr = dates[d]
-      var page = 1
-      var MAX_PAGES = 10
-      while (page <= MAX_PAGES) {
-        if (Date.now() > globalDeadline) break
-        var url =
-          'https://datalbus.com.br:8000/api/v2/trips?date=' +
-          encodeURIComponent(dateStr) +
-          '&per_page=100&page=' +
-          page
-        var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
-        if (res.statusCode !== 200 || !res.json) break
-        var pageTrips = extractArray(res.json)
-        for (var i = 0; i < pageTrips.length; i++) {
-          pageTrips[i]._queryDate = dateStr
-          allTrips.push(pageTrips[i])
+
+      if (!workerIdFilterTested) {
+        var filterResult = tryWorkerIdFilter(dateStr)
+        workerIdFilterTested = true
+        workerIdFilterSupported = filterResult.supported
+        if (workerIdFilterSupported) {
+          for (var t = 0; t < filterResult.trips.length; t++) {
+            if (matchedTrips.length >= MAX_TRIPS) break
+            if (Date.now() > globalDeadline) {
+              partialData = true
+              break
+            }
+            var trip = filterResult.trips[t]
+            trip._queryDate = dateStr
+            matchedTrips.push(trip)
+            processTripEvents(trip, matchedTrips, allRawEvents, errors)
+          }
+          if (filterResult.trips.length >= 100 && matchedTrips.length < MAX_TRIPS && !partialData) {
+            var wPage = 2
+            while (wPage <= MAX_PAGES && matchedTrips.length < MAX_TRIPS) {
+              if (Date.now() > globalDeadline) {
+                partialData = true
+                break
+              }
+              var wUrl =
+                'https://datalbus.com.br:8000/api/v2/trips?worker_id=' +
+                encodeURIComponent(String(workerId)) +
+                '&date=' +
+                encodeURIComponent(dateStr) +
+                '&per_page=100&page=' +
+                wPage
+              var wRes = apiGetWithRetry(wUrl, TRIPS_TIMEOUT)
+              if (wRes.statusCode !== 200 || !wRes.json) break
+              var wTrips = extractArray(wRes.json)
+              for (var wt = 0; wt < wTrips.length; wt++) {
+                if (matchedTrips.length >= MAX_TRIPS) break
+                if (Date.now() > globalDeadline) {
+                  partialData = true
+                  break
+                }
+                wTrips[wt]._queryDate = dateStr
+                matchedTrips.push(wTrips[wt])
+                processTripEvents(wTrips[wt], matchedTrips, allRawEvents, errors)
+              }
+              if (wTrips.length < 100 || wTrips.length === 0) break
+              wPage++
+            }
+          }
+          continue
         }
-        if (pageTrips.length < 100 || pageTrips.length === 0) break
-        page++
+      }
+
+      if (workerIdFilterSupported) {
+        var fPage = 1
+        while (fPage <= MAX_PAGES && matchedTrips.length < MAX_TRIPS) {
+          if (Date.now() > globalDeadline) {
+            partialData = true
+            break
+          }
+          var fUrl =
+            'https://datalbus.com.br:8000/api/v2/trips?worker_id=' +
+            encodeURIComponent(String(workerId)) +
+            '&date=' +
+            encodeURIComponent(dateStr) +
+            '&per_page=100&page=' +
+            fPage
+          var fRes = apiGetWithRetry(fUrl, TRIPS_TIMEOUT)
+          if (fRes.statusCode !== 200 || !fRes.json) break
+          var fTrips = extractArray(fRes.json)
+          for (var ft = 0; ft < fTrips.length; ft++) {
+            if (matchedTrips.length >= MAX_TRIPS) break
+            if (Date.now() > globalDeadline) {
+              partialData = true
+              break
+            }
+            fTrips[ft]._queryDate = dateStr
+            matchedTrips.push(fTrips[ft])
+            processTripEvents(fTrips[ft], matchedTrips, allRawEvents, errors)
+          }
+          if (fTrips.length < 100 || fTrips.length === 0) break
+          fPage++
+        }
+      } else {
+        var page = 1
+        while (page <= MAX_PAGES) {
+          if (Date.now() > globalDeadline) {
+            partialData = true
+            break
+          }
+          if (matchedTrips.length >= MAX_TRIPS) break
+
+          var url =
+            'https://datalbus.com.br:8000/api/v2/trips?date=' +
+            encodeURIComponent(dateStr) +
+            '&per_page=100&page=' +
+            page
+          var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
+          if (res.statusCode !== 200 || !res.json) break
+          var pageTrips = extractArray(res.json)
+
+          for (var i = 0; i < pageTrips.length; i++) {
+            if (matchedTrips.length >= MAX_TRIPS) break
+            if (Date.now() > globalDeadline) {
+              partialData = true
+              break
+            }
+            pageTrips[i]._queryDate = dateStr
+            if (tripMatchesWorkerId(pageTrips[i])) {
+              matchedTrips.push(pageTrips[i])
+              processTripEvents(pageTrips[i], matchedTrips, allRawEvents, errors)
+            }
+          }
+
+          if (matchedTrips.length >= MAX_TRIPS) break
+          if (pageTrips.length < 100 || pageTrips.length === 0) break
+          page++
+        }
       }
     }
-    var matched = []
-    for (var m = 0; m < allTrips.length; m++) {
-      if (tripMatchesWorkerId(allTrips[m])) matched.push(allTrips[m])
+
+    return {
+      trips: matchedTrips,
+      events: allRawEvents,
+      errors: errors,
+      partialData: partialData,
     }
-    return matched
   }
 
   function fetchScore() {
@@ -409,16 +520,20 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
       if (!currentToken) return e.json(502, { error: 'Erro de autenticação com a API DataBus.' })
     }
 
-    var scoreRes = fetchScore()
-    authFailed = false
+    var fetchResult = fetchTripsAndEvents()
 
-    var trips = fetchTripsPrimary()
     if (authFailed) {
       return e.json(502, {
         error: 'Falha na autenticação com a DataBus após re-tentativa.',
         debug: { calls: debugCalls, errors: debugErrors },
       })
     }
+
+    var trips = fetchResult.trips
+    var allRawEvents = fetchResult.events
+    var errors = fetchResult.errors
+    var partialData = fetchResult.partialData
+
     if (!trips) trips = []
 
     if (trips.length === 0) {
@@ -429,42 +544,9 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         total_viagens: 0,
         metricas: { distancia_total: 0, duracao_total: 0, total_viagens: 0 },
         partialData: false,
-        errors: [],
+        errors: errors,
         debug: { calls: debugCalls, errors: debugErrors },
       })
-    }
-
-    trips.sort(function (a, b) {
-      return getTripDate(b).localeCompare(getTripDate(a))
-    })
-
-    var partialData = false
-    if (trips.length > MAX_TRIPS) {
-      partialData = true
-      trips = trips.slice(0, MAX_TRIPS)
-    }
-
-    var allRawEvents = []
-    var errors = []
-
-    for (var i = 0; i < trips.length; i++) {
-      if (Date.now() > globalDeadline) {
-        partialData = true
-        for (var j = i; j < trips.length; j++) {
-          var skipId = getTripId(trips[j])
-          errors.push({ tripId: skipId, error: 'Skipped due to global timeout' })
-          debugErrors.push({ tripId: skipId, error: 'Skipped due to global timeout' })
-        }
-        break
-      }
-      var result = fetchEventsForTrip(trips[i])
-      if (result.error) {
-        errors.push({ tripId: result.tripId || getTripId(trips[i]), error: result.error })
-        debugErrors.push({ tripId: result.tripId || getTripId(trips[i]), error: result.error })
-      }
-      if (result.events && result.events.length > 0) {
-        for (var p = 0; p < result.events.length; p++) allRawEvents.push(result.events[p])
-      }
     }
 
     if (Date.now() > globalDeadline) partialData = true
@@ -559,6 +641,11 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         ),
       )
       if (!isNaN(driveDurNum)) duracaoTotal += driveDurNum
+    }
+
+    var scoreRes = null
+    if (Date.now() < globalDeadline - 5000) {
+      scoreRes = fetchScore()
     }
 
     var finalPontuacao =
