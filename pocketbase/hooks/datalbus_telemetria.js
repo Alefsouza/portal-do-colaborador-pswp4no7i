@@ -302,6 +302,30 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         String(firstTrip.driverId || ''),
         'driver_worker_id',
         String(firstTrip.driver_worker_id || ''),
+        'worker',
+        String(firstTrip.worker || ''),
+        'driver',
+        String(firstTrip.driver || ''),
+        'operador_id',
+        String(firstTrip.operador_id || ''),
+        'employee_id',
+        String(firstTrip.employee_id || ''),
+        'operador',
+        String(firstTrip.operador || ''),
+        'employee',
+        String(firstTrip.employee || ''),
+        'motorista_id',
+        String(firstTrip.motorista_id || ''),
+        'motorista',
+        String(firstTrip.motorista || ''),
+        'user_id',
+        String(firstTrip.user_id || ''),
+        'userId',
+        String(firstTrip.userId || ''),
+        'colaborador_id',
+        String(firstTrip.colaborador_id || ''),
+        'funcionario_id',
+        String(firstTrip.funcionario_id || ''),
       )
     if (firstTrip.subtrips && Array.isArray(firstTrip.subtrips) && firstTrip.subtrips.length > 0) {
       var subKeys = []
@@ -335,10 +359,24 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         trip.driver_id ||
         trip.driverId ||
         trip.driver_worker_id ||
+        trip.worker ||
+        trip.driver ||
+        trip.operador_id ||
+        trip.employee_id ||
+        trip.operador ||
+        trip.employee ||
+        trip.motorista_id ||
+        trip.motorista ||
+        trip.user_id ||
+        trip.userId ||
+        trip.colaborador_id ||
+        trip.funcionario_id ||
         '',
     )
     var tripWorkerNum = parseInt(tripWorkerStr, 10)
     if (!isNaN(tripWorkerNum) && tripWorkerNum === workerId) return true
+
+    if (tripWorkerStr && tripWorkerStr === String(workerId)) return true
 
     var subtrips = trip.subtrips || trip.sub_trips || trip.subTrips || []
     if (!Array.isArray(subtrips)) return false
@@ -349,10 +387,19 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
           subtrips[s].worker_id_int ||
           subtrips[s].driver_id ||
           subtrips[s].driverId ||
+          subtrips[s].worker ||
+          subtrips[s].driver ||
+          subtrips[s].operador_id ||
+          subtrips[s].employee_id ||
+          subtrips[s].operador ||
+          subtrips[s].employee ||
+          subtrips[s].motorista_id ||
+          subtrips[s].motorista ||
           '',
       )
       var subWorkerNum = parseInt(subWorkerStr, 10)
       if (!isNaN(subWorkerNum) && subWorkerNum === workerId) return true
+      if (subWorkerStr && subWorkerStr === String(workerId)) return true
     }
     return false
   }
@@ -413,8 +460,15 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
     }
     var trips = extractArray(res.json)
     if (trips.length > 0) logTripFields(trips, 'tryWorkerIdFilter')
-    if (trips.length > 0 && !tripMatchesWorkerId(trips[0])) {
-      return { supported: false, trips: trips }
+    if (trips.length > 0) {
+      var anyMatch = false
+      for (var ti = 0; ti < trips.length; ti++) {
+        if (tripMatchesWorkerId(trips[ti])) {
+          anyMatch = true
+          break
+        }
+      }
+      if (!anyMatch) return { supported: false, trips: trips }
     }
     return { supported: true, trips: trips }
   }
@@ -462,7 +516,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
             matchedTrips.push(trip)
             processTripEvents(trip, matchedTrips, allRawEvents, errors)
           }
-          if (filterResult.trips.length >= 100 && matchedTrips.length < MAX_TRIPS && !partialData) {
+          if (matchedTrips.length < MAX_TRIPS && !partialData) {
             var wPage = 2
             while (wPage <= MAX_PAGES && matchedTrips.length < MAX_TRIPS) {
               if (Date.now() > globalDeadline) {
@@ -478,7 +532,14 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
                 wPage
               pagesTraversed++
               var wRes = apiGetWithRetry(wUrl, TRIPS_TIMEOUT)
-              if (wRes.statusCode !== 200 || !wRes.json) break
+              if (wRes.statusCode !== 200 || !wRes.json) {
+                debugErrors.push({
+                  endpoint: wUrl,
+                  error: 'wPage ' + wPage + ' returned status ' + wRes.statusCode,
+                })
+                wPage++
+                continue
+              }
               var wTrips = extractArray(wRes.json)
               if (wTrips.length > 0) logTripFields(wTrips, 'workerIdFilter-wPage-' + wPage)
               for (var wt = 0; wt < wTrips.length; wt++) {
@@ -491,7 +552,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
                 matchedTrips.push(wTrips[wt])
                 processTripEvents(wTrips[wt], matchedTrips, allRawEvents, errors)
               }
-              if (wTrips.length < 100 || wTrips.length === 0) break
+              if (wTrips.length === 0) break
               wPage++
             }
           }
@@ -515,7 +576,14 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
             fPage
           pagesTraversed++
           var fRes = apiGetWithRetry(fUrl, TRIPS_TIMEOUT)
-          if (fRes.statusCode !== 200 || !fRes.json) break
+          if (fRes.statusCode !== 200 || !fRes.json) {
+            debugErrors.push({
+              endpoint: fUrl,
+              error: 'fPage ' + fPage + ' returned status ' + fRes.statusCode,
+            })
+            fPage++
+            continue
+          }
           var fTrips = extractArray(fRes.json)
           if (fTrips.length > 0) logTripFields(fTrips, 'workerIdFilter-fPage-' + fPage)
           for (var ft = 0; ft < fTrips.length; ft++) {
@@ -528,7 +596,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
             matchedTrips.push(fTrips[ft])
             processTripEvents(fTrips[ft], matchedTrips, allRawEvents, errors)
           }
-          if (fTrips.length < 100 || fTrips.length === 0) break
+          if (fTrips.length === 0) break
           fPage++
         }
       } else {
@@ -547,7 +615,14 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
             page
           pagesTraversed++
           var res = apiGetWithRetry(url, TRIPS_TIMEOUT)
-          if (res.statusCode !== 200 || !res.json) break
+          if (res.statusCode !== 200 || !res.json) {
+            debugErrors.push({
+              endpoint: url,
+              error: 'page ' + page + ' returned status ' + res.statusCode + ' for date ' + dateStr,
+            })
+            page++
+            continue
+          }
           var pageTrips = extractArray(res.json)
           if (page === 1 && pageTrips.length > 0)
             logTripFields(pageTrips, 'dateSearch-page1-' + dateStr)
@@ -566,7 +641,7 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
           }
 
           if (matchedTrips.length >= MAX_TRIPS) break
-          if (pageTrips.length < 100 || pageTrips.length === 0) break
+          if (pageTrips.length === 0) break
           page++
         }
       }
@@ -624,12 +699,17 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
 
     if (trips.length === 0) {
       return e.json(200, {
+        message:
+          'Nenhuma viagem encontrada para este colaborador no período. Worker ID: ' +
+          workerId +
+          ' | Páginas consultadas: ' +
+          pagesTraversed,
         pontuacao: null,
         eventos: [],
         resumo: {},
         total_viagens: 0,
         metricas: { distancia_total: 0, duracao_total: 0, total_viagens: 0 },
-        partialData: false,
+        partialData: partialData,
         errors: errors,
         debug: {
           calls: debugCalls,

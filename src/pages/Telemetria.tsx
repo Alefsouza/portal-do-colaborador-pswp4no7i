@@ -461,7 +461,8 @@ export default function Telemetria() {
               <CardContent className="py-12 text-center">
                 <p className="text-slate-500">
                   {totalViagens === 0
-                    ? 'Nenhuma viagem encontrada para este colaborador no período.'
+                    ? results.message ||
+                      'Nenhuma viagem encontrada para este colaborador no período.'
                     : 'Nenhum evento de direção registrado neste período.'}
                 </p>
                 {totalViagens === 0 && (
@@ -474,7 +475,7 @@ export default function Telemetria() {
             </Card>
           )}
 
-          {results.debug && sortedEvents.length === 0 && (
+          {results.debug && (sortedEvents.length === 0 || totalViagens === 0) && (
             <Card className="border-slate-200">
               <CardContent className="p-0">
                 <Accordion type="single" collapsible>

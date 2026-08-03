@@ -54,6 +54,7 @@ export interface TelemetryDebug {
 }
 
 export interface TelemetryRecord {
+  message?: string
   pontuacao: TelemetryScore | number | null
   eventos: TelemetryEvent[]
   resumo: Record<string, number>
