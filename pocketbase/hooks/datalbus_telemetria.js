@@ -469,8 +469,24 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
         }
       }
       if (!anyMatch) return { supported: false, trips: trips }
+      return { supported: true, trips: trips }
     }
-    return { supported: true, trips: trips }
+    // worker_id filter returned empty — fallback query without worker_id
+    var fallbackUrl =
+      'https://datalbus.com.br:8000/api/v2/trips?date=' +
+      encodeURIComponent(dateStr) +
+      '&per_page=100&page=1'
+    pagesTraversed++
+    var fallbackRes = apiGetWithRetry(fallbackUrl, TRIPS_TIMEOUT)
+    if (fallbackRes.statusCode !== 200 || !fallbackRes.json) {
+      return { supported: false, trips: [] }
+    }
+    var fallbackTrips = extractArray(fallbackRes.json)
+    if (fallbackTrips.length > 0) {
+      logTripFields(fallbackTrips, 'tryWorkerIdFilter-fallback')
+      return { supported: false, trips: fallbackTrips }
+    }
+    return { supported: false, trips: [] }
   }
 
   function fetchTripsAndEvents() {
@@ -558,6 +574,63 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', async (e) => {
           }
           continue
         }
+        // Fallback returned trips without worker_id filter — process them
+        if (filterResult.trips.length > 0) {
+          for (var ft = 0; ft < filterResult.trips.length; ft++) {
+            if (matchedTrips.length >= MAX_TRIPS) break
+            if (Date.now() > globalDeadline) {
+              partialData = true
+              break
+            }
+            filterResult.trips[ft]._queryDate = dateStr
+            if (tripMatchesWorkerId(filterResult.trips[ft])) {
+              matchedTrips.push(filterResult.trips[ft])
+              processTripEvents(filterResult.trips[ft], matchedTrips, allRawEvents, errors)
+            }
+          }
+          if (matchedTrips.length < MAX_TRIPS && !partialData) {
+            var fbPage = 2
+            while (fbPage <= MAX_PAGES && matchedTrips.length < MAX_TRIPS) {
+              if (Date.now() > globalDeadline) {
+                partialData = true
+                break
+              }
+              var fbUrl =
+                'https://datalbus.com.br:8000/api/v2/trips?date=' +
+                encodeURIComponent(dateStr) +
+                '&per_page=100&page=' +
+                fbPage
+              pagesTraversed++
+              var fbRes = apiGetWithRetry(fbUrl, TRIPS_TIMEOUT)
+              if (fbRes.statusCode !== 200 || !fbRes.json) {
+                debugErrors.push({
+                  endpoint: fbUrl,
+                  error: 'fbPage ' + fbPage + ' returned status ' + fbRes.statusCode,
+                })
+                fbPage++
+                continue
+              }
+              var fbTrips = extractArray(fbRes.json)
+              for (var fbt = 0; fbt < fbTrips.length; fbt++) {
+                if (matchedTrips.length >= MAX_TRIPS) break
+                if (Date.now() > globalDeadline) {
+                  partialData = true
+                  break
+                }
+                fbTrips[fbt]._queryDate = dateStr
+                if (tripMatchesWorkerId(fbTrips[fbt])) {
+                  matchedTrips.push(fbTrips[fbt])
+                  processTripEvents(fbTrips[fbt], matchedTrips, allRawEvents, errors)
+                }
+              }
+              if (fbTrips.length === 0) break
+              fbPage++
+            }
+          }
+          continue
+        }
+        // Both filtered and unfiltered returned empty — no trips on this date
+        continue
       }
 
       if (workerIdFilterSupported) {

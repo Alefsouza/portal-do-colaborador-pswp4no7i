@@ -475,7 +475,7 @@ export default function Telemetria() {
             </Card>
           )}
 
-          {results.debug && (sortedEvents.length === 0 || totalViagens === 0) && (
+          {results.debug && (
             <Card className="border-slate-200">
               <CardContent className="p-0">
                 <Accordion type="single" collapsible>
