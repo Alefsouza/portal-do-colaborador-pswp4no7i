@@ -22,95 +22,135 @@ export interface TelemetryScore {
   total_score?: number
   distance?: number
   distancia?: number
-  metricas?: Record<string, unknown>
-  totais?: Record<string, unknown>
   [key: string]: unknown
 }
 
+export interface TelemetryResumo {
+  total_eventos: number
+  por_tipo: Record<string, number>
+}
+
 export interface TelemetryMetricas {
-  distancia_total: number
-  duracao_total: number
-  total_viagens?: number
-}
-
-export interface TelemetryError {
-  tripId?: string
-  error: string
-  detail?: string
-}
-
-export interface TelemetryDebugCall {
-  endpoint: string
-  statusCode: number
-  responsePreview: string
-}
-
-export interface TelemetryFilterTest {
-  name: string
-  url: string
-  statusCode: number
-  tripsReturned: number
-  matchedTrips: number
-  worked: boolean
-  error?: string
+  total_viagens: number
+  distancia_total: string
+  duracao_total: string
 }
 
 export interface TelemetryDebug {
-  calls: TelemetryDebugCall[]
-  errors: TelemetryError[]
-  filter_tests?: TelemetryFilterTest[]
-  variation_used?: string
-  total_trips_scanned?: number
-  trips_found?: number
-  pages_processed?: number
-  pages_traversed?: number
-  data_source?: string
-  processing_time_seconds?: number
-  worker_id?: string | number
+  worker_id: number | string
+  data: string
+  paginas_total: number
+  paginas_processadas: number
+  paginas_restantes: number
+  trips_total_dia: number
+  trips_varridas: number
+  trips_encontradas: number
+  tempo_segundos: number
+  completo: boolean
+  aviso?: string
 }
 
 export interface TelemetryRecord {
-  message?: string
   pontuacao: TelemetryScore | number | null
-  eventos: TelemetryEvent[]
-  resumo: Record<string, number>
-  total_viagens: number
+  eventos_direcao: TelemetryEvent[]
+  eventos_tecnicos: TelemetryEvent[]
+  resumo: TelemetryResumo
   metricas: TelemetryMetricas
-  partialData?: boolean
-  errors?: TelemetryError[]
-  debug?: TelemetryDebug
+  debug: TelemetryDebug
 }
 
 export interface TelemetryQuery {
-  dataInicial: string
-  dataFinal: string
+  data: string
   workerId: string
 }
 
-const FALLBACK_MESSAGE =
-  'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.'
+export interface SyncInitResponse {
+  total_pages: number
+  total_trips: number
+  current_page: number
+  sync_id: string
+}
+
+export interface SyncChunkResponse {
+  processed_pages: number[]
+  next_page: number
+  has_more: boolean
+  trips_processed: number
+}
+
+export interface SyncStatus {
+  id: string
+  date: string
+  total_pages: number
+  pages_processed: number[]
+  status: 'in_progress' | 'completed' | 'failed'
+}
+
+export class NeedsSyncError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'NeedsSyncError'
+  }
+}
+
+const FALLBACK_MESSAGE = 'Não foi possível carregar os dados de telemetria. Tente novamente.'
+
+export const TELEMETRY_TIMEOUT_MS = 180000
 
 export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRecord> {
   try {
     const res = await pb.send('/backend/v1/datalbus/telemetria', {
       method: 'POST',
-      body: {
-        data_inicial: query.dataInicial,
-        data_final: query.dataFinal,
-        worker_id: query.workerId,
-      },
+      body: { data: query.data, worker_id: query.workerId },
     })
+    if (res && res.needs_sync) {
+      throw new NeedsSyncError(res.message || 'Esta data precisa ser sincronizada.')
+    }
     return res as TelemetryRecord
   } catch (err) {
+    if (err instanceof NeedsSyncError) throw err
     if (err instanceof ClientResponseError) {
       const response = err.response as { error?: string }
-      if (response?.error) {
-        throw new Error(response.error)
-      }
-      if (err.status === 0 || err.isAbort) {
-        throw new Error(FALLBACK_MESSAGE)
-      }
+      if (response?.error) throw new Error(response.error)
     }
     throw new Error(FALLBACK_MESSAGE)
+  }
+}
+
+export async function syncInit(date: string): Promise<SyncInitResponse> {
+  const res = await pb.send('/backend/v1/datalbus/sync-init', {
+    method: 'POST',
+    body: { date },
+  })
+  return res as SyncInitResponse
+}
+
+export async function syncChunk(
+  date: string,
+  startPage: number,
+  chunkSize: number = 3,
+): Promise<SyncChunkResponse> {
+  const res = await pb.send('/backend/v1/datalbus/sync-chunk', {
+    method: 'POST',
+    body: { date, start_page: startPage, chunk_size: chunkSize },
+  })
+  return res as SyncChunkResponse
+}
+
+export async function getSyncStatus(date: string): Promise<SyncStatus | null> {
+  try {
+    const record = await pb.collection('datalbus_sync_status').getFirstListItem(`date = "${date}"`)
+    const rawPages = record.pages_processed
+    const pagesProcessed =
+      typeof rawPages === 'string' ? JSON.parse(rawPages || '[]') : rawPages || []
+    return {
+      id: record.id,
+      date: record.date,
+      total_pages: record.total_pages || 0,
+      pages_processed: Array.isArray(pagesProcessed) ? pagesProcessed : [],
+      status: record.status || 'in_progress',
+    }
+  } catch {
+    return null
   }
 }

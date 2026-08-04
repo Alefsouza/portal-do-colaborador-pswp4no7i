@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Loader2,
   Search,
@@ -9,9 +9,8 @@ import {
   Clock,
   MapPin,
   Terminal,
-  Filter,
   CheckCircle2,
-  XCircle,
+  Wrench,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -27,7 +26,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { fetchTelemetry, type TelemetryRecord, type TelemetryScore } from '@/services/telemetry'
+import {
+  fetchTelemetry,
+  TELEMETRY_TIMEOUT_MS,
+  NeedsSyncError,
+  type TelemetryRecord,
+  type TelemetryEvent,
+} from '@/services/telemetry'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
 import {
@@ -36,6 +41,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
+import { SyncModal } from '@/components/telemetria/SyncModal'
 
 function toDateStr(date: Date): string {
   const y = date.getFullYear()
@@ -65,15 +71,17 @@ function formatDuration(duracao: number | string | undefined): string {
   return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
 }
 
-function formatDriveDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return '-'
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
+function formatDriveDuration(durationStr: string): string {
+  if (!durationStr || durationStr === '00:00:00') return '-'
+  const parts = durationStr.split(':')
+  if (parts.length !== 3) return durationStr
+  const hours = parseInt(parts[0], 10)
+  const minutes = parseInt(parts[1], 10)
   if (hours > 0) return `${hours}h ${minutes}m`
   return `${minutes}m`
 }
 
-function extractScore(p: TelemetryScore | number | null | undefined): number | null {
+function extractScore(p: TelemetryRecord['pontuacao']): number | null {
   if (typeof p === 'number') return p
   if (!p || typeof p !== 'object') return null
   const keys = ['score', 'pontuacao', 'total', 'valor', 'nota', 'overall_score', 'total_score']
@@ -86,7 +94,7 @@ function extractScore(p: TelemetryScore | number | null | undefined): number | n
   return null
 }
 
-function extractDistance(p: TelemetryScore | number | null | undefined): number | null {
+function extractDistance(p: TelemetryRecord['pontuacao']): number | null {
   if (!p || typeof p !== 'object') return null
   const keys = [
     'distance',
@@ -103,15 +111,6 @@ function extractDistance(p: TelemetryScore | number | null | undefined): number 
     if (typeof v === 'string') {
       const parsed = parseFloat(v)
       if (!isNaN(parsed) && parsed > 0) return parsed
-    }
-  }
-  for (const nestedKey of ['metricas', 'totais', 'data']) {
-    const nested = p[nestedKey]
-    if (nested && typeof nested === 'object') {
-      for (const k of keys) {
-        const v = (nested as Record<string, unknown>)[k]
-        if (typeof v === 'number' && v > 0) return v
-      }
     }
   }
   return null
@@ -141,39 +140,19 @@ function getEventBadgeClass(tipo: string): string {
   return 'bg-slate-100 text-slate-700 border-slate-200'
 }
 
-function formatCounter(tipo: string, count: number): string {
-  const l = tipo.toLowerCase()
-  if (l.includes('velocidade'))
-    return `${count} ${count === 1 ? 'Excesso' : 'Excessos'} de velocidade`
-  if (l.includes('freada') || l.includes('frenagem'))
-    return `${count} ${count === 1 ? 'Freada' : 'Freadas'} brusca${count === 1 ? '' : 's'}`
-  if (l.includes('acelera'))
-    return `${count} ${count === 1 ? 'Aceleração' : 'Acelerações'} brusca${count === 1 ? '' : 's'}`
-  if (l.includes('celular')) return `${count} ${count === 1 ? 'Uso' : 'Usos'} de celular`
-  if (l.includes('curva') || l.includes('desconforto'))
-    return `${count} ${count === 1 ? 'Desconforto' : 'Desconfortos'} em curva`
-  return `${count} ${tipo}`
-}
-
-const KNOWN_EVENT_TYPES = [
-  'Desconforto em curva',
-  'Excesso de velocidade',
-  'Freada brusca',
-  'Aceleração brusca',
-  'Curva perigosa',
-  'Uso de celular',
-]
-
 export default function Telemetria() {
   const { user } = useAuth()
-  const [dataInicial, setDataInicial] = useState<Date | undefined>(undefined)
-  const [dataFinal, setDataFinal] = useState<Date | undefined>(undefined)
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<TelemetryRecord | null>(null)
   const [hasConsulted, setHasConsulted] = useState(false)
   const [error, setError] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [workerId, setWorkerId] = useState<string>('')
+  const [showTechnicalEvents, setShowTechnicalEvents] = useState(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [syncModalOpen, setSyncModalOpen] = useState(false)
+  const [syncDate, setSyncDate] = useState('')
 
   useEffect(() => {
     if (!user?.id) return
@@ -188,60 +167,190 @@ export default function Telemetria() {
       .catch(() => {})
   }, [user?.id])
 
-  const isValid = useMemo(() => {
-    if (!dataInicial || !dataFinal) return false
-    if (!workerId) return false
-    return dataInicial <= dataFinal
-  }, [dataInicial, dataFinal, workerId])
+  const isValid = useMemo(() => !!selectedDate && !!workerId, [selectedDate, workerId])
 
   const score = useMemo(() => extractScore(results?.pontuacao), [results])
   const distance = useMemo(() => {
-    if (results?.metricas?.distancia_total) return results.metricas.distancia_total
+    if (results?.metricas?.distancia_total) {
+      const parsed = parseFloat(results.metricas.distancia_total)
+      if (!isNaN(parsed)) return parsed
+    }
     return extractDistance(results?.pontuacao)
   }, [results])
-  const totalViagens = useMemo(() => results?.total_viagens ?? 0, [results])
-  const duracaoTotal = useMemo(() => results?.metricas?.duracao_total ?? 0, [results])
-  const sortedEvents = useMemo(() => {
-    if (!results?.eventos) return []
-    return [...results.eventos].sort((a, b) => (b.data || '').localeCompare(a.data || ''))
+  const totalViagens = useMemo(() => results?.metricas?.total_viagens ?? 0, [results])
+  const sortedDrivingEvents = useMemo(() => {
+    if (!results?.eventos_direcao) return []
+    return [...results.eventos_direcao].sort((a, b) => (b.data || '').localeCompare(a.data || ''))
   }, [results])
-
-  const allResumoKeys = useMemo(() => {
-    const keys = Object.keys(results?.resumo || {})
-    const known = KNOWN_EVENT_TYPES.filter((k) => !keys.includes(k))
-    return [...keys, ...known]
+  const sortedTechnicalEvents = useMemo(() => {
+    if (!results?.eventos_tecnicos) return []
+    return [...results.eventos_tecnicos].sort((a, b) => (b.data || '').localeCompare(a.data || ''))
   }, [results])
 
   const handleConsult = async () => {
-    if (!isValid || !dataInicial || !dataFinal) return
+    if (!isValid || !selectedDate) return
     setLoading(true)
     setError(false)
     setErrorMessage('')
     setResults(null)
+    setShowTechnicalEvents(false)
+    setHasConsulted(false)
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => {
+      setLoading(false)
+      setError(true)
+      setErrorMessage('A consulta excedeu o tempo limite. Tente novamente ou selecione outra data.')
+    }, TELEMETRY_TIMEOUT_MS)
+
     try {
       const data = await fetchTelemetry({
-        dataInicial: toDateStr(dataInicial),
-        dataFinal: toDateStr(dataFinal),
+        data: toDateStr(selectedDate),
         workerId,
       })
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
       setResults(data)
       setHasConsulted(true)
     } catch (err) {
-      setError(true)
-      const fallback =
-        'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.'
-      if (err instanceof Error && err.message) {
-        setErrorMessage(err.message)
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+      if (err instanceof NeedsSyncError) {
+        setSyncDate(toDateStr(selectedDate))
+        setSyncModalOpen(true)
       } else {
-        setErrorMessage(fallback)
+        setError(true)
+        const fallback = 'Não foi possível carregar os dados de telemetria. Tente novamente.'
+        if (err instanceof Error && err.message) {
+          setErrorMessage(err.message)
+        } else {
+          setErrorMessage(fallback)
+        }
       }
     } finally {
       setLoading(false)
     }
   }
 
+  const handleSyncComplete = async () => {
+    setSyncModalOpen(false)
+    if (!selectedDate || !workerId) return
+    setLoading(true)
+    setError(false)
+    setErrorMessage('')
+    setResults(null)
+    setShowTechnicalEvents(false)
+    setHasConsulted(false)
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => {
+      setLoading(false)
+      setError(true)
+      setErrorMessage('A consulta excedeu o tempo limite. Tente novamente.')
+    }, TELEMETRY_TIMEOUT_MS)
+
+    try {
+      const data = await fetchTelemetry({
+        data: toDateStr(selectedDate),
+        workerId,
+      })
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+      setResults(data)
+      setHasConsulted(true)
+    } catch (err) {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+      if (err instanceof NeedsSyncError) {
+        setSyncDate(toDateStr(selectedDate))
+        setSyncModalOpen(true)
+      } else {
+        setError(true)
+        const fallback = 'Não foi possível carregar os dados de telemetria. Tente novamente.'
+        if (err instanceof Error && err.message) {
+          setErrorMessage(err.message)
+        } else {
+          setErrorMessage(fallback)
+        }
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+  }, [])
+
+  const renderEventsTable = (events: TelemetryEvent[], isTechnical: boolean) => (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-primary/5 hover:bg-primary/5">
+            <TableHead className="font-bold text-primary">Data/Hora</TableHead>
+            <TableHead className="font-bold text-primary">Tipo do Evento</TableHead>
+            <TableHead className="font-bold text-primary">Veículo</TableHead>
+            <TableHead className="font-bold text-primary">Duração</TableHead>
+            <TableHead className="font-bold text-primary">Quantidade</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {events.map((event, index) => (
+            <TableRow
+              key={index}
+              className={cn(
+                'border-slate-100 transition-colors hover:bg-primary/5',
+                index % 2 === 0 ? 'bg-white' : 'bg-green-50/40',
+              )}
+            >
+              <TableCell className="font-medium text-slate-900 whitespace-nowrap">
+                {formatEventDate(event.data)}
+              </TableCell>
+              <TableCell>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'px-2.5 py-1 text-xs font-semibold',
+                    getEventBadgeClass(event.tipo),
+                  )}
+                >
+                  {event.tipo || '-'}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-slate-600 whitespace-nowrap">
+                {event.veiculo || '-'}
+              </TableCell>
+              <TableCell className="text-slate-600 whitespace-nowrap">
+                {formatDuration(event.duracao)}
+              </TableCell>
+              <TableCell className="text-slate-600 whitespace-nowrap">
+                {event.quantidade !== undefined && event.quantidade !== 0 ? event.quantidade : '-'}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+
   return (
     <div className="space-y-6 animate-fade-in-up">
+      <SyncModal
+        open={syncModalOpen}
+        date={syncDate}
+        onClose={() => setSyncModalOpen(false)}
+        onSyncComplete={handleSyncComplete}
+      />
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
           <Gauge className="w-6 h-6 text-primary" />
@@ -249,7 +358,7 @@ export default function Telemetria() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Telemetria</h1>
           <p className="text-slate-500 mt-0.5 text-sm">
-            Consulte os dados de telemetria dos veículos por período.
+            Consulte os dados de telemetria dos veículos por data.
           </p>
         </div>
       </div>
@@ -258,30 +367,14 @@ export default function Telemetria() {
         <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Data Inicial</label>
+              <label className="text-sm font-semibold text-slate-700">Selecione a data</label>
               <DatePicker
-                value={dataInicial}
-                onChange={setDataInicial}
-                placeholder="DD/MM/AAAA"
-                disabled={(date: Date) => (dataFinal ? date > dataFinal : false)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700">Data Final</label>
-              <DatePicker
-                value={dataFinal}
-                onChange={setDataFinal}
-                placeholder="DD/MM/AAAA"
-                disabled={(date: Date) => (dataInicial ? date < dataInicial : false)}
+                value={selectedDate}
+                onChange={setSelectedDate}
+                placeholder="dd/mm/aaaa"
               />
             </div>
           </div>
-
-          {dataInicial && dataFinal && dataInicial > dataFinal && (
-            <p className="text-sm text-red-500 mb-4">
-              A Data Inicial deve ser anterior ou igual à Data Final.
-            </p>
-          )}
 
           <Button
             onClick={handleConsult}
@@ -303,31 +396,37 @@ export default function Telemetria() {
         </CardContent>
       </Card>
 
+      {loading && (
+        <Card className="border-slate-200">
+          <CardContent className="py-12 text-center">
+            <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-4" />
+            <p className="text-slate-700 font-medium">
+              Buscando suas viagens, isso pode levar até 2 minutos...
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="w-5 h-5" />
           <AlertTitle>Erro</AlertTitle>
           <AlertDescription>
-            {errorMessage ||
-              'Não foi possível carregar os dados de telemetria. Tente novamente em instantes.'}
+            {errorMessage || 'Não foi possível carregar os dados de telemetria. Tente novamente.'}
           </AlertDescription>
         </Alert>
       )}
 
       {hasConsulted && !loading && !error && results && (
         <>
-          {results.partialData && (
+          {results.debug?.aviso && (
             <Alert className="border-amber-200 bg-amber-50">
               <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <AlertTitle className="text-amber-800">Dados Parciais</AlertTitle>
-              <AlertDescription className="text-amber-700">
-                O processamento foi limitado para evitar timeout.{' '}
-                {results.errors && results.errors.length > 0
-                  ? `${results.errors.length} viagem(ões) não puderam ser processada(s).`
-                  : 'Apenas as viagens mais recentes foram processadas.'}
-              </AlertDescription>
+              <AlertTitle className="text-amber-800">Aviso</AlertTitle>
+              <AlertDescription className="text-amber-700">{results.debug.aviso}</AlertDescription>
             </Alert>
           )}
+
           {score !== null && (
             <Card className="border-slate-200">
               <CardContent className="p-6">
@@ -347,9 +446,11 @@ export default function Telemetria() {
                       <span className="font-semibold text-slate-700">{getScoreLabel(score)}</span>
                     </p>
                     <p className="text-sm text-slate-500">
-                      {sortedEvents.length}{' '}
-                      {sortedEvents.length === 1 ? 'evento registrado' : 'eventos registrados'} no
-                      período
+                      {sortedDrivingEvents.length}{' '}
+                      {sortedDrivingEvents.length === 1
+                        ? 'evento registrado'
+                        : 'eventos registrados'}{' '}
+                      nesta data
                     </p>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 flex-shrink-0">
@@ -374,7 +475,7 @@ export default function Telemetria() {
                         <Clock className="w-5 h-5 text-amber-600" />
                       </div>
                       <p className="text-xl font-bold text-slate-900">
-                        {formatDriveDuration(duracaoTotal)}
+                        {formatDriveDuration(results.metricas?.duracao_total || '00:00:00')}
                       </p>
                       <p className="text-xs text-slate-500">Direção</p>
                     </div>
@@ -384,98 +485,86 @@ export default function Telemetria() {
             </Card>
           )}
 
-          {totalViagens > 0 && allResumoKeys.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {allResumoKeys.map((tipo) => (
-                <Badge
-                  key={tipo}
-                  variant="outline"
-                  className={cn('px-3 py-1.5 text-sm font-medium', getEventBadgeClass(tipo))}
-                >
-                  {formatCounter(tipo, results.resumo[tipo] || 0)}
-                </Badge>
-              ))}
-            </div>
-          )}
+          {totalViagens > 0 &&
+            results.resumo?.por_tipo &&
+            Object.keys(results.resumo.por_tipo).length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(results.resumo.por_tipo).map(([tipo, count]) => (
+                  <Badge
+                    key={tipo}
+                    variant="outline"
+                    className={cn('px-3 py-1.5 text-sm font-medium', getEventBadgeClass(tipo))}
+                  >
+                    {tipo}: {count}
+                  </Badge>
+                ))}
+              </div>
+            )}
 
-          {sortedEvents.length > 0 ? (
+          {totalViagens === 0 ? (
+            <Card className="border-slate-200">
+              <CardContent className="py-12 text-center">
+                <p className="text-slate-500">Nenhuma viagem encontrada para esta data.</p>
+                {results.debug && !results.debug.completo && (
+                  <p className="text-sm text-amber-600 mt-2">
+                    O processamento não foi concluído (páginas processadas:{' '}
+                    {results.debug.paginas_processadas} de {results.debug.paginas_total}). Tente
+                    consultar novamente para processar as páginas restantes.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          ) : sortedDrivingEvents.length > 0 ? (
             <Card className="border-slate-200">
               <CardContent className="p-0">
                 <div className="px-6 py-4 border-b border-slate-100">
-                  <h2 className="font-bold text-lg text-slate-900">Eventos Registrados</h2>
+                  <h2 className="font-bold text-lg text-slate-900">Eventos de Direção</h2>
                   <p className="text-sm text-slate-500 mt-0.5">
-                    {sortedEvents.length} registro(s) encontrado(s)
+                    {sortedDrivingEvents.length} registro(s) encontrado(s)
                   </p>
                 </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-primary/5 hover:bg-primary/5">
-                        <TableHead className="font-bold text-primary">Data/Hora</TableHead>
-                        <TableHead className="font-bold text-primary">Tipo do Evento</TableHead>
-                        <TableHead className="font-bold text-primary">Veículo</TableHead>
-                        <TableHead className="font-bold text-primary">Duração</TableHead>
-                        <TableHead className="font-bold text-primary">Quantidade</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sortedEvents.map((event, index) => (
-                        <TableRow
-                          key={index}
-                          className={cn(
-                            'border-slate-100 transition-colors hover:bg-primary/5',
-                            index % 2 === 0 ? 'bg-white' : 'bg-green-50/40',
-                          )}
-                        >
-                          <TableCell className="font-medium text-slate-900 whitespace-nowrap">
-                            {formatEventDate(event.data)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                'px-2.5 py-1 text-xs font-semibold',
-                                getEventBadgeClass(event.tipo),
-                              )}
-                            >
-                              {event.tipo || '-'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-slate-600 whitespace-nowrap">
-                            {event.veiculo || '-'}
-                          </TableCell>
-                          <TableCell className="text-slate-600 whitespace-nowrap">
-                            {formatDuration(event.duracao)}
-                          </TableCell>
-                          <TableCell className="text-slate-600 whitespace-nowrap">
-                            {event.quantidade !== undefined && event.quantidade !== 0
-                              ? event.quantidade
-                              : '-'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                {renderEventsTable(sortedDrivingEvents, false)}
               </CardContent>
             </Card>
           ) : (
             <Card className="border-slate-200">
               <CardContent className="py-12 text-center">
-                <p className="text-slate-500">
-                  {totalViagens === 0
-                    ? results.message ||
-                      'Nenhuma viagem encontrada para este colaborador no período.'
-                    : 'Nenhum evento de direção registrado neste período.'}
-                </p>
-                {totalViagens === 0 && (
-                  <p className="text-sm text-slate-400 mt-2">
-                    Worker ID: {workerId} | Páginas consultadas:{' '}
-                    {results.debug?.pages_processed ?? results.debug?.pages_traversed ?? 0}
+                <p className="text-slate-500">Nenhum evento de direção registrado nesta data.</p>
+                {results.debug && !results.debug.completo && (
+                  <p className="text-sm text-amber-600 mt-2">
+                    O processamento não foi concluído (páginas processadas:{' '}
+                    {results.debug.paginas_processadas} de {results.debug.paginas_total}). Tente
+                    consultar novamente para processar as páginas restantes.
                   </p>
                 )}
               </CardContent>
             </Card>
+          )}
+
+          {sortedTechnicalEvents.length > 0 && (
+            <div>
+              <Button
+                variant="outline"
+                onClick={() => setShowTechnicalEvents(!showTechnicalEvents)}
+                className="mb-4"
+              >
+                <Wrench className="w-4 h-4 mr-2" />
+                {showTechnicalEvents ? 'Ocultar eventos técnicos' : 'Ver eventos técnicos'}
+              </Button>
+              {showTechnicalEvents && (
+                <Card className="border-slate-200">
+                  <CardContent className="p-0">
+                    <div className="px-6 py-4 border-b border-slate-100">
+                      <h2 className="font-bold text-lg text-slate-900">Eventos Técnicos</h2>
+                      <p className="text-sm text-slate-500 mt-0.5">
+                        {sortedTechnicalEvents.length} registro(s) encontrado(s)
+                      </p>
+                    </div>
+                    {renderEventsTable(sortedTechnicalEvents, true)}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
 
           {results.debug && (
@@ -497,136 +586,46 @@ export default function Telemetria() {
                               <strong>Worker ID:</strong> {results.debug.worker_id ?? '-'}
                             </span>
                             <span className="text-slate-600">
-                              <strong>Variação usada:</strong>{' '}
-                              <Badge variant="outline" className="ml-1 text-xs">
-                                {results.debug.variation_used ?? 'none'}
-                              </Badge>
+                              <strong>Data:</strong> {results.debug.data ?? '-'}
                             </span>
                             <span className="text-slate-600">
-                              <strong>Trips escaneadas:</strong>{' '}
-                              {results.debug.total_trips_scanned ?? 0}
+                              <strong>Status:</strong>{' '}
+                              {results.debug.completo ? (
+                                <span className="text-green-600 font-medium">Completo</span>
+                              ) : (
+                                <span className="text-amber-600 font-medium">Parcial</span>
+                              )}
                             </span>
                             <span className="text-slate-600">
-                              <strong>Trips encontradas:</strong> {results.debug.trips_found ?? 0}
+                              <strong>Páginas:</strong> {results.debug.paginas_processadas ?? 0} de{' '}
+                              {results.debug.paginas_total ?? 0}
                             </span>
                             <span className="text-slate-600">
-                              <strong>Páginas processadas:</strong>{' '}
-                              {results.debug.pages_processed ?? results.debug.pages_traversed ?? 0}
+                              <strong>Páginas restantes:</strong>{' '}
+                              {results.debug.paginas_restantes ?? 0}
                             </span>
                             <span className="text-slate-600">
-                              <strong>Fonte:</strong> {results.debug.data_source ?? 'api'}
+                              <strong>Trips do dia:</strong> {results.debug.trips_total_dia ?? 0}
+                            </span>
+                            <span className="text-slate-600">
+                              <strong>Trips varridas:</strong> {results.debug.trips_varridas ?? 0}
+                            </span>
+                            <span className="text-slate-600">
+                              <strong>Trips encontradas:</strong>{' '}
+                              {results.debug.trips_encontradas ?? 0}
                             </span>
                             <span className="text-slate-600">
                               <strong>Tempo:</strong>{' '}
-                              {results.debug.processing_time_seconds != null
-                                ? `${results.debug.processing_time_seconds.toFixed(1)}s`
+                              {results.debug.tempo_segundos != null
+                                ? `${results.debug.tempo_segundos.toFixed(1)}s`
                                 : '-'}
                             </span>
                           </div>
                         </div>
-                        {results.debug.filter_tests && results.debug.filter_tests.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                              <Filter className="w-4 h-4" />
-                              Testes de Filtro de Variação
-                            </h4>
-                            <div className="space-y-2">
-                              {results.debug.filter_tests.map((test, idx) => (
-                                <div
-                                  key={idx}
-                                  className={cn(
-                                    'bg-slate-50 rounded-lg p-3 border',
-                                    test.worked ? 'border-green-200' : 'border-slate-100',
-                                  )}
-                                >
-                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                    {test.worked ? (
-                                      <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                                    ) : (
-                                      <XCircle className="w-4 h-4 text-slate-400 shrink-0" />
-                                    )}
-                                    <span
-                                      className={cn(
-                                        'text-xs font-bold px-2 py-0.5 rounded',
-                                        test.statusCode === 200
-                                          ? 'bg-green-100 text-green-700'
-                                          : 'bg-red-100 text-red-700',
-                                      )}
-                                    >
-                                      {test.statusCode}
-                                    </span>
-                                    <code className="text-xs text-slate-600 font-semibold">
-                                      {test.name}
-                                    </code>
-                                    {test.worked && (
-                                      <Badge className="text-xs bg-green-500 hover:bg-green-500">
-                                        Funcionou
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="flex flex-wrap gap-3 text-xs text-slate-500 ml-6">
-                                    <span>Trips retornadas: {test.tripsReturned}</span>
-                                    <span>Trips correspondentes: {test.matchedTrips}</span>
-                                  </div>
-                                  <code className="text-xs text-slate-400 block ml-6 mt-1 break-all">
-                                    {test.url}
-                                  </code>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {results.debug.calls && results.debug.calls.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-semibold text-slate-700 mb-2">
-                              Chamadas à API
-                            </h4>
-                            <div className="space-y-2">
-                              {results.debug.calls.map((call, idx) => (
-                                <div
-                                  key={idx}
-                                  className="bg-slate-50 rounded-lg p-3 border border-slate-100"
-                                >
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span
-                                      className={cn(
-                                        'text-xs font-bold px-2 py-0.5 rounded',
-                                        call.statusCode === 200
-                                          ? 'bg-green-100 text-green-700'
-                                          : 'bg-red-100 text-red-700',
-                                      )}
-                                    >
-                                      {call.statusCode}
-                                    </span>
-                                    <code className="text-xs text-slate-600 break-all">
-                                      {call.endpoint}
-                                    </code>
-                                  </div>
-                                  {call.responseFirstLine && (
-                                    <pre className="text-xs text-slate-500 mt-1 whitespace-pre-wrap break-all max-h-20 overflow-y-auto">
-                                      {call.responseFirstLine}
-                                    </pre>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {results.debug.errors && results.debug.errors.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-semibold text-red-700 mb-2">Erros</h4>
-                            <div className="space-y-2">
-                              {results.debug.errors.map((err, idx) => (
-                                <div
-                                  key={idx}
-                                  className="bg-red-50 rounded-lg p-3 border border-red-100"
-                                >
-                                  <pre className="text-xs text-red-600 whitespace-pre-wrap break-all">
-                                    {JSON.stringify(err, null, 2)}
-                                  </pre>
-                                </div>
-                              ))}
-                            </div>
+                        {results.debug.aviso && (
+                          <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <p className="text-sm text-amber-700">{results.debug.aviso}</p>
                           </div>
                         )}
                       </div>
