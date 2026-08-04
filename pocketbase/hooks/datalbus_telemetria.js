@@ -47,12 +47,30 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     )
   } catch (_) {}
 
-  if (syncRecords.length === 0 || syncRecords[0].getString('status') !== 'sucesso') {
-    return e.json(200, {
-      sincronizado: false,
-      mensagem:
-        'Os dados desta data ainda nao foram sincronizados. Tente novamente em alguns minutos.',
-    })
+  var syncLogStatus = syncRecords.length > 0 ? syncRecords[0].getString('status') : ''
+  var isSyncLogFinal = syncLogStatus === 'sucesso' || syncLogStatus === 'completed'
+
+  if (!isSyncLogFinal) {
+    var syncStatusRecords = []
+    try {
+      syncStatusRecords = $app.findRecordsByFilter(
+        'datalbus_sync_status',
+        'date = {:d}',
+        '-updated',
+        1,
+        0,
+        { d: data },
+      )
+    } catch (_) {}
+
+    var syncStatusVal = syncStatusRecords.length > 0 ? syncStatusRecords[0].getString('status') : ''
+    if (syncStatusVal !== 'completed' && syncStatusVal !== 'sucesso') {
+      return e.json(200, {
+        sincronizado: false,
+        mensagem:
+          'Os dados desta data ainda nao foram sincronizados. Tente novamente em alguns minutos.',
+      })
+    }
   }
 
   var trips = []
