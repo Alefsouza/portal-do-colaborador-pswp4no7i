@@ -8,8 +8,29 @@ routerAdd('POST', '/backend/v1/datalbus/limpar-antigos', (e) => {
 
   var syncToken = e.requestInfo().headers['x_sync_token'] || ''
   var expectedToken = $secrets.get('DATALBUS_SYNC_TOKEN') || ''
-  if (!expectedToken || syncToken !== expectedToken) {
-    return e.json(401, { error: 'Token de sincronização inválido.' })
+  var isTokenAuth = expectedToken && syncToken === expectedToken
+
+  if (!isTokenAuth) {
+    var adminAuthOk = false
+    var authHeader = e.requestInfo().headers['authorization'] || ''
+    if (authHeader.startsWith('Bearer ')) {
+      var jwtToken = authHeader.slice(7)
+      try {
+        var jwtPayload = $security.parseUnverifiedJWT(jwtToken)
+        if (jwtPayload && jwtPayload.id) {
+          if (!jwtPayload.exp || Date.now() < jwtPayload.exp * 1000) {
+            var usuarioRec = $app.findRecordById('usuarios', jwtPayload.id)
+            var usuarioPerfil = usuarioRec.getString('perfil')
+            if (usuarioPerfil === 'TI' || usuarioPerfil === 'Admin') {
+              adminAuthOk = true
+            }
+          }
+        }
+      } catch (_) {}
+    }
+    if (!adminAuthOk) {
+      return e.json(401, { error: 'Token de sincronização inválido.' })
+    }
   }
 
   var now = new Date()

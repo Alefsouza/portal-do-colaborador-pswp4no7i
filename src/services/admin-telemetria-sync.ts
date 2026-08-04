@@ -1,7 +1,10 @@
 import pb from '@/lib/pocketbase/client'
 
-const SYNC_TOKEN = import.meta.env.VITE_DATALBUS_SYNC_TOKEN || ''
 const PB_URL = import.meta.env.VITE_POCKETBASE_URL || ''
+
+function getAdminToken(): string {
+  return localStorage.getItem('admin_token') || ''
+}
 
 export interface SyncLogRecord {
   id: string
@@ -113,7 +116,7 @@ export async function syncDay(date: string): Promise<SyncDayResult> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Sync-Token': SYNC_TOKEN,
+      Authorization: `Bearer ${getAdminToken()}`,
     },
     body: JSON.stringify({ data: date }),
   })
@@ -129,7 +132,7 @@ export async function clearOldData(): Promise<ClearOldDataResult> {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Sync-Token': SYNC_TOKEN,
+      Authorization: `Bearer ${getAdminToken()}`,
     },
   })
   const data = await res.json()
