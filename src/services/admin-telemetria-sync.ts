@@ -65,6 +65,12 @@ export interface ClearOldDataResult {
   data_corte: string
 }
 
+export interface ClearAllDataResult {
+  trips_removidas: number
+  eventos_removidos: number
+  sync_log_removidos: number
+}
+
 export async function getTelemetryStats(): Promise<TelemetryStats> {
   let lastSyncDate: string | null = null
   let lastSyncConcluido: string | null = null
@@ -183,6 +189,35 @@ export async function pollSyncDay(
   } while (result.status === 'em_andamento')
 
   return result
+}
+
+export async function clearAllData(): Promise<ClearAllDataResult> {
+  const token = getAdminToken()
+  if (!token) {
+    throw new Error('Sessão expirada. Faça login novamente.')
+  }
+  let res: Response
+  try {
+    res = await fetch(`${PB_URL}/backend/v1/datalbus/limpar-tudo`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    })
+  } catch (err) {
+    throw friendlyNetworkError(err)
+  }
+  let data: Record<string, unknown>
+  try {
+    data = await res.json()
+  } catch {
+    throw new Error(`Erro ${res.status}`)
+  }
+  if (!res.ok) {
+    throw new Error((data.error as string) || `Erro ${res.status}`)
+  }
+  return data as unknown as ClearAllDataResult
 }
 
 export async function clearOldData(): Promise<ClearOldDataResult> {

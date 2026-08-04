@@ -36,6 +36,7 @@ import {
   getSyncHistory,
   pollSyncDay,
   clearOldData,
+  clearAllData,
   type TelemetryStats,
   type SyncLogRecord,
   type SyncDayResult,
@@ -125,6 +126,18 @@ export default function AdminTelemetriaSync() {
       navigate('/admin/dashboard', { replace: true })
     }
   }, [user, canAccess, navigate])
+
+  useEffect(() => {
+    const LIMPAR_TUDO_FLAG = 'datalbus_limpar_tudo_executed'
+    if (canAccess && !localStorage.getItem(LIMPAR_TUDO_FLAG)) {
+      localStorage.setItem(LIMPAR_TUDO_FLAG, '1')
+      clearAllData()
+        .then(() => loadAll())
+        .catch(() => {
+          localStorage.removeItem(LIMPAR_TUDO_FLAG)
+        })
+    }
+  }, [canAccess, loadAll])
 
   useEffect(() => {
     loadAll()
