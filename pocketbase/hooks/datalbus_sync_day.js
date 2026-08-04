@@ -264,7 +264,18 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     return []
   }
 
+  function hasDriver(trip) {
+    var subs = trip.subtrips || trip.sub_trips || trip.subTrips || []
+    if (!Array.isArray(subs) || subs.length === 0) return false
+    for (var si = 0; si < subs.length; si++) {
+      var wid = parseInt(String(subs[si].worker_id || '0'), 10)
+      if (wid) return true
+    }
+    return false
+  }
+
   function cacheTrip(trip, dateStr) {
+    if (!hasDriver(trip)) return
     var tripId = String(trip.id || trip.trip_id || trip.tripId || '')
     if (!tripId) return
     var cacheId = dateStr + ':' + tripId
@@ -279,18 +290,6 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     } catch (_) {}
   }
 
-  var DRIVING_EVENTS = {
-    'excesso de velocidade': true,
-    'freada brusca': true,
-    'aceleração brusca': true,
-    'desconforto em curva': true,
-    'aceleração lateral à esquerda': true,
-    'aceleração lateral à direita': true,
-    'pontuação do motorista na viagem': true,
-    'limite de marcha lenta excedido com porta aberta': true,
-    'ponto de força': true,
-  }
-
   var nowIso = new Date().toISOString()
 
   function upsertTrip(trip) {
@@ -303,6 +302,10 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
       var sub = subtrips[s]
       var workerId = parseInt(String(sub.worker_id || '0'), 10)
       if (!workerId) continue
+      var driverName = String(
+        sub.driver_name || sub.worker_name || sub.motorista || trip.driver_name || '',
+      )
+      if (!driverName) continue
       try {
         $app
           .db()
@@ -333,47 +336,6 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
       } catch (_) {}
     }
     return count
-  }
-
-  function upsertEvent(ev, tripId, workerId) {
-    var eventoId = parseInt(String(ev.id || ev.event_id || ev.eventId || '0'), 10)
-    if (!eventoId) return
-    var tipo = String(
-      ev.event_type_description || ev.event_type || ev.tipo || ev.type || ev.event_name || '',
-    )
-    var cls = DRIVING_EVENTS[String(tipo).trim().toLowerCase()] ? 'direcao' : 'tecnico'
-    try {
-      $app
-        .db()
-        .newQuery(
-          'INSERT INTO telemetria_eventos (id, evento_id, trip_id, worker_id, data, data_hora, asset_id, tipo_evento, event_type_id, categoria, duracao, quantidade, latitude, longitude, classificacao, raw_data, sincronizado_em, created, updated) VALUES ({:id}, {:eid}, {:tid}, {:wid}, {:dt}, {:dh}, {:ai}, {:te}, {:eti}, {:cat}, {:dur}, {:qtd}, {:lat}, {:lng}, {:cls}, {:rd}, {:se}, {:n}, {:n}) ON CONFLICT(evento_id) DO UPDATE SET trip_id={:tid}, worker_id={:wid}, data={:dt}, data_hora={:dh}, asset_id={:ai}, tipo_evento={:te}, event_type_id={:eti}, categoria={:cat}, duracao={:dur}, quantidade={:qtd}, latitude={:lat}, longitude={:lng}, classificacao={:cls}, raw_data={:rd}, sincronizado_em={:se}, updated={:n}',
-        )
-        .bind({
-          id: $security.randomString(15),
-          eid: eventoId,
-          tid: tripId,
-          wid: workerId,
-          dt: data,
-          dh: String(
-            ev.time || ev.event_date || ev.data_hora || ev.timestamp || ev.created_at || '',
-          ),
-          ai: parseInt(String(ev.asset_id || ev.vehicle_id || '0'), 10) || 0,
-          te: tipo,
-          eti: parseInt(String(ev.event_type_id || ev.event_type || '0'), 10) || 0,
-          cat: String(ev.event_category_description || ev.category || ev.categoria || ''),
-          dur: ev.duration || ev.duracao || 0,
-          qtd:
-            ev.amount !== undefined ? ev.amount : ev.quantidade !== undefined ? ev.quantidade : 0,
-          lat: String(ev.latitude || ev.lat || ''),
-          lng: String(ev.longitude || ev.lng || ev.lon || ''),
-          cls: cls,
-          rd: JSON.stringify(ev),
-          se: nowIso,
-          n: nowIso,
-        })
-        .execute()
-      eventosProcessed++
-    } catch (_) {}
   }
 
   if (phase === 'fetching_trips') {
@@ -420,20 +382,20 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     $app.save(syncStatus)
 
     if (pagesProcessed.length >= totalPages) {
-      phase = 'processing_events'
-      syncStatus.set('status', 'processing_events')
+      phase = 'processing_trips'
+      syncStatus.set('status', 'processing_trips')
       syncStatus.set('updated_at', new Date().toISOString())
       $app.save(syncStatus)
     }
   }
 
-  if (phase === 'processing_events') {
+  if (phase === 'processing_trips') {
     var batchRows = []
     try {
       batchRows = $app
         .db()
         .newQuery(
-          'SELECT id, trip_json FROM _datalbus_trips_cache WHERE date = {:d} AND (processed = 0 OR processed IS NULL) LIMIT 20',
+          'SELECT id, trip_json FROM _datalbus_trips_cache WHERE date = {:d} AND (processed = 0 OR processed IS NULL) LIMIT 50',
         )
         .bind({ d: data })
         .all(new DynamicModel({ id: '', trip_json: '' }))
@@ -461,31 +423,7 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
         } catch (_) {}
         continue
       }
-      var upsertedCount = upsertTrip(trip)
-      tripsProcessed += upsertedCount
-
-      var tripIdNum = parseInt(String(trip.id || trip.trip_id || trip.tripId || '0'), 10)
-      var subtrips = trip.subtrips || trip.sub_trips || trip.subTrips || []
-      var defaultWorker = 0
-      if (Array.isArray(subtrips) && subtrips.length > 0) {
-        defaultWorker = parseInt(String(subtrips[0].worker_id || '0'), 10) || 0
-      }
-
-      var evRes = apiGet(
-        'https://datalbus.com.br:8000/api/v2/trips/' +
-          encodeURIComponent(String(tripIdNum)) +
-          '/events?date=' +
-          encodeURIComponent(data) +
-          '&per_page=100',
-      )
-      if (evRes.statusCode === 200 && evRes.json) {
-        var events = extractArray(evRes.json)
-        for (var m = 0; m < events.length; m++) {
-          var ev = events[m]
-          var evWorker = parseInt(String(ev.worker_id || '0'), 10) || defaultWorker
-          upsertEvent(ev, tripIdNum, evWorker)
-        }
-      }
+      tripsProcessed += upsertTrip(trip)
 
       try {
         $app
@@ -521,7 +459,7 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     remainingTrips = remModel.cnt || 0
   } catch (_) {}
 
-  var isComplete = phase === 'processing_events' && remainingTrips === 0
+  var isComplete = phase === 'processing_trips' && remainingTrips === 0
   var finalStatus = isComplete ? 'sucesso' : 'em_andamento'
 
   if (isComplete) {
@@ -538,7 +476,7 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
   logRecord.set('paginas_total', totalPages)
   logRecord.set('paginas_processadas', pagesProcessed.length)
   logRecord.set('trips_processadas', tripsProcessed)
-  logRecord.set('eventos_processados', eventosProcessed)
+  logRecord.set('eventos_processados', 0)
   logRecord.set('motoristas_encontrados', motoristasEncontrados)
   if (isComplete) {
     logRecord.set('concluido_em', new Date().toISOString())
@@ -555,12 +493,30 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     $app.save(syncStatus)
   }
 
+  $app
+    .logger()
+    .info(
+      'sync-day result',
+      'date',
+      data,
+      'status',
+      finalStatus,
+      'tripsProcessed',
+      tripsProcessed,
+      'motoristas',
+      motoristasEncontrados,
+      'remaining',
+      remainingTrips,
+      'duration',
+      Math.floor((Date.now() - startTime) / 1000),
+    )
+
   return e.json(200, {
     sucesso: isComplete,
     status: finalStatus,
     fase: isComplete ? 'completed' : phase,
     trips_processadas: tripsProcessed,
-    eventos_processados: eventosProcessed,
+    eventos_processados: 0,
     duracao_segundos: Math.floor((Date.now() - startTime) / 1000),
     paginas_total: totalPages,
     paginas_processadas: pagesProcessed.length,

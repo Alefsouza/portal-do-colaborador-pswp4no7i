@@ -142,20 +142,7 @@ routerAdd('POST', '/backend/v1/datalbus/sync-events', (e) => {
     return []
   }
 
-  var DRIVING_EVENTS = {
-    'excesso de velocidade': true,
-    'freada brusca': true,
-    'aceleração brusca': true,
-    'desconforto em curva': true,
-    'aceleração lateral à esquerda': true,
-    'aceleração lateral à direita': true,
-    'pontuação do motorista na viagem': true,
-    'limite de marcha lenta excedido com porta aberta': true,
-    'ponto de força': true,
-  }
-
   var nowIso = new Date().toISOString()
-  var eventosProcessed = 0
   var tripsProcessed = 0
 
   function upsertTrip(trip) {
@@ -168,6 +155,10 @@ routerAdd('POST', '/backend/v1/datalbus/sync-events', (e) => {
       var sub = subtrips[s]
       var workerId = parseInt(String(sub.worker_id || '0'), 10)
       if (!workerId) continue
+      var driverName = String(
+        sub.driver_name || sub.worker_name || sub.motorista || trip.driver_name || '',
+      )
+      if (!driverName) continue
       try {
         $app
           .db()
@@ -202,51 +193,6 @@ routerAdd('POST', '/backend/v1/datalbus/sync-events', (e) => {
       }
     }
     return count
-  }
-
-  function upsertEvent(ev, tripId, workerId) {
-    var eventoId = parseInt(String(ev.id || ev.event_id || ev.eventId || '0'), 10)
-    if (!eventoId) return
-    var tipo = String(
-      ev.event_type_description || ev.event_type || ev.tipo || ev.type || ev.event_name || '',
-    )
-    var cls = DRIVING_EVENTS[String(tipo).trim().toLowerCase()] ? 'direcao' : 'tecnico'
-    try {
-      $app
-        .db()
-        .newQuery(
-          'INSERT INTO telemetria_eventos (id, evento_id, trip_id, worker_id, data, data_hora, asset_id, tipo_evento, event_type_id, categoria, duracao, quantidade, latitude, longitude, classificacao, raw_data, sincronizado_em, created, updated) VALUES ({:id}, {:eid}, {:tid}, {:wid}, {:dt}, {:dh}, {:ai}, {:te}, {:eti}, {:cat}, {:dur}, {:qtd}, {:lat}, {:lng}, {:cls}, {:rd}, {:se}, {:n}, {:n}) ON CONFLICT(evento_id) DO UPDATE SET trip_id={:tid}, worker_id={:wid}, data={:dt}, data_hora={:dh}, asset_id={:ai}, tipo_evento={:te}, event_type_id={:eti}, categoria={:cat}, duracao={:dur}, quantidade={:qtd}, latitude={:lat}, longitude={:lng}, classificacao={:cls}, raw_data={:rd}, sincronizado_em={:se}, updated={:n}',
-        )
-        .bind({
-          id: $security.randomString(15),
-          eid: eventoId,
-          tid: tripId,
-          wid: workerId,
-          dt: date,
-          dh: String(
-            ev.time || ev.event_date || ev.data_hora || ev.timestamp || ev.created_at || '',
-          ),
-          ai: parseInt(String(ev.asset_id || ev.vehicle_id || '0'), 10) || 0,
-          te: tipo,
-          eti: parseInt(String(ev.event_type_id || ev.event_type || '0'), 10) || 0,
-          cat: String(ev.event_category_description || ev.category || ev.categoria || ''),
-          dur: ev.duration || ev.duracao || 0,
-          qtd:
-            ev.amount !== undefined ? ev.amount : ev.quantidade !== undefined ? ev.quantidade : 0,
-          lat: String(ev.latitude || ev.lat || ''),
-          lng: String(ev.longitude || ev.lng || ev.lon || ''),
-          cls: cls,
-          rd: JSON.stringify(ev),
-          se: nowIso,
-          n: nowIso,
-        })
-        .execute()
-      eventosProcessed++
-    } catch (err) {
-      $app
-        .logger()
-        .error('sync-events: upsertEvent failed', 'eventoId', eventoId, 'error', String(err))
-    }
   }
 
   try {
@@ -294,37 +240,6 @@ routerAdd('POST', '/backend/v1/datalbus/sync-events', (e) => {
       continue
     }
     tripsProcessed += upsertTrip(trip)
-    var tripIdNum = parseInt(String(trip.id || trip.trip_id || trip.tripId || '0'), 10)
-    var subtrips = trip.subtrips || trip.sub_trips || trip.subTrips || []
-    var defaultWorker = 0
-    if (Array.isArray(subtrips) && subtrips.length > 0) {
-      defaultWorker = parseInt(String(subtrips[0].worker_id || '0'), 10) || 0
-    }
-    var evRes = apiGet(
-      'https://datalbus.com.br:8000/api/v2/trips/' +
-        encodeURIComponent(String(tripIdNum)) +
-        '/events?date=' +
-        encodeURIComponent(date) +
-        '&per_page=100',
-    )
-    if (evRes.statusCode === 200 && evRes.json) {
-      var events = extractArray(evRes.json)
-      for (var m = 0; m < events.length; m++) {
-        var ev = events[m]
-        var evWorker = parseInt(String(ev.worker_id || '0'), 10) || defaultWorker
-        upsertEvent(ev, tripIdNum, evWorker)
-      }
-    } else {
-      $app
-        .logger()
-        .warn(
-          'sync-events: events fetch failed',
-          'tripId',
-          tripIdNum,
-          'statusCode',
-          evRes.statusCode,
-        )
-    }
     try {
       $app
         .db()
@@ -376,13 +291,11 @@ routerAdd('POST', '/backend/v1/datalbus/sync-events', (e) => {
   $app
     .logger()
     .info(
-      'sync-events batch done',
+      'sync-events batch done (trips only)',
       'date',
       date,
       'tripsProcessed',
       tripsProcessed,
-      'eventosProcessed',
-      eventosProcessed,
       'remaining',
       remainingTrips,
       'complete',
@@ -392,7 +305,7 @@ routerAdd('POST', '/backend/v1/datalbus/sync-events', (e) => {
   return e.json(200, {
     sucesso: isComplete,
     trips_processadas: tripsProcessed,
-    eventos_processados: eventosProcessed,
+    eventos_processados: 0,
     trips_restantes: remainingTrips,
     completo: isComplete,
   })
