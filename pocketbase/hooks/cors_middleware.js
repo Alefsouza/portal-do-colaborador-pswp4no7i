@@ -15,7 +15,10 @@ onServe((e) => {
         .set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
       c.response
         .header()
-        .set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Tenancy, Accept')
+        .set(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Authorization, X-Tenancy, X-Sync-Token, Accept',
+        )
       c.response.header().set('Access-Control-Max-Age', '86400')
 
       if (c.request.method === 'OPTIONS') {

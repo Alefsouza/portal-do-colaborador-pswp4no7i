@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
   Loader2,
   RefreshCw,
@@ -123,7 +124,11 @@ export default function AdminTelemetriaSync() {
       setSyncResult(result)
       await loadAll()
     } catch (err) {
-      setSyncError(err instanceof Error ? err.message : 'Erro ao sincronizar')
+      setSyncError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível conectar ao servidor. Tente novamente.',
+      )
     } finally {
       setSyncingDate(false)
     }
@@ -138,7 +143,11 @@ export default function AdminTelemetriaSync() {
       setClearResult(result)
       await loadAll()
     } catch (err) {
-      setClearError(err instanceof Error ? err.message : 'Erro ao limpar dados')
+      setClearError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível conectar ao servidor. Tente novamente.',
+      )
     } finally {
       setClearing(false)
     }
@@ -147,10 +156,17 @@ export default function AdminTelemetriaSync() {
   const handleResync = async (date: string) => {
     setResyncingDate(date)
     try {
-      await syncDay(date)
+      const result = await syncDay(date)
       await loadAll()
-    } catch {
-      /* ignore */
+      toast.success(
+        `Ressincronização concluída: ${result.trips_processadas} trips e ${result.eventos_processados} eventos processados.`,
+      )
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível conectar ao servidor. Tente novamente.',
+      )
     } finally {
       setResyncingDate(null)
     }

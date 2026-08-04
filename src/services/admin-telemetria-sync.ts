@@ -6,6 +6,19 @@ function getAdminToken(): string {
   return localStorage.getItem('admin_token') || ''
 }
 
+function friendlyNetworkError(err: unknown): Error {
+  if (err instanceof TypeError) {
+    return new Error('Não foi possível conectar ao servidor. Tente novamente.')
+  }
+  if (err instanceof Error) {
+    if (err.message === 'Failed to fetch' || err.message.includes('HTTP N/A')) {
+      return new Error('Não foi possível conectar ao servidor. Tente novamente.')
+    }
+    return err
+  }
+  return new Error('Ocorreu um erro inesperado. Tente novamente.')
+}
+
 export interface SyncLogRecord {
   id: string
   data_sincronizada: string
@@ -112,32 +125,60 @@ export async function getSyncHistory(): Promise<SyncLogRecord[]> {
 }
 
 export async function syncDay(date: string): Promise<SyncDayResult> {
-  const res = await fetch(`${PB_URL}/backend/v1/datalbus/sync-day`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getAdminToken()}`,
-    },
-    body: JSON.stringify({ data: date }),
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data?.error || data?.erro || `Erro ${res.status}`)
+  const token = getAdminToken()
+  if (!token) {
+    throw new Error('Sessão expirada. Faça login novamente.')
   }
-  return data as SyncDayResult
+  let res: Response
+  try {
+    res = await fetch(`${PB_URL}/backend/v1/datalbus/sync-day`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ data: date }),
+    })
+  } catch (err) {
+    throw friendlyNetworkError(err)
+  }
+  let data: Record<string, unknown>
+  try {
+    data = await res.json()
+  } catch {
+    throw new Error(`Erro ${res.status}`)
+  }
+  if (!res.ok) {
+    throw new Error((data.error as string) || (data.erro as string) || `Erro ${res.status}`)
+  }
+  return data as unknown as SyncDayResult
 }
 
 export async function clearOldData(): Promise<ClearOldDataResult> {
-  const res = await fetch(`${PB_URL}/backend/v1/datalbus/limpar-antigos`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getAdminToken()}`,
-    },
-  })
-  const data = await res.json()
-  if (!res.ok) {
-    throw new Error(data?.error || `Erro ${res.status}`)
+  const token = getAdminToken()
+  if (!token) {
+    throw new Error('Sessão expirada. Faça login novamente.')
   }
-  return data as ClearOldDataResult
+  let res: Response
+  try {
+    res = await fetch(`${PB_URL}/backend/v1/datalbus/limpar-antigos`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    })
+  } catch (err) {
+    throw friendlyNetworkError(err)
+  }
+  let data: Record<string, unknown>
+  try {
+    data = await res.json()
+  } catch {
+    throw new Error(`Erro ${res.status}`)
+  }
+  if (!res.ok) {
+    throw new Error((data.error as string) || `Erro ${res.status}`)
+  }
+  return data as unknown as ClearOldDataResult
 }
