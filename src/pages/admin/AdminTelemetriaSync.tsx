@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Progress } from '@/components/ui/progress'
 import { DatePicker } from '@/components/date-picker'
 import {
   Table,
@@ -29,11 +30,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { toDateStr, formatDateBr, formatEventDate } from '@/lib/telemetry-utils'
+import { toDateStr, formatDateBr } from '@/lib/telemetry-utils'
 import {
   getTelemetryStats,
   getSyncHistory,
-  syncDay,
+  pollSyncDay,
   clearOldData,
   type TelemetryStats,
   type SyncLogRecord,
@@ -71,6 +72,19 @@ function getStatusLabel(status: string): string {
   }
 }
 
+function getPhaseLabel(fase: string): string {
+  switch (fase) {
+    case 'fetching_trips':
+      return 'Buscando viagens...'
+    case 'processing_events':
+      return 'Processando eventos...'
+    case 'completed':
+      return 'Concluído'
+    default:
+      return 'Processando...'
+  }
+}
+
 export default function AdminTelemetriaSync() {
   const { user } = useAdminAuth()
   const navigate = useNavigate()
@@ -84,12 +98,14 @@ export default function AdminTelemetriaSync() {
   const [syncingDate, setSyncingDate] = useState(false)
   const [syncResult, setSyncResult] = useState<SyncDayResult | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [syncProgress, setSyncProgress] = useState<SyncDayResult | null>(null)
 
   const [clearing, setClearing] = useState(false)
   const [clearResult, setClearResult] = useState<ClearOldDataResult | null>(null)
   const [clearError, setClearError] = useState<string | null>(null)
 
   const [resyncingDate, setResyncingDate] = useState<string | null>(null)
+  const [resyncProgress, setResyncProgress] = useState<SyncDayResult | null>(null)
 
   const loadAll = useCallback(async () => {
     setLoadingStats(true)
@@ -119,8 +135,11 @@ export default function AdminTelemetriaSync() {
     setSyncingDate(true)
     setSyncResult(null)
     setSyncError(null)
+    setSyncProgress(null)
     try {
-      const result = await syncDay(toDateStr(specificDate))
+      const result = await pollSyncDay(toDateStr(specificDate), (progress) => {
+        setSyncProgress(progress)
+      })
       setSyncResult(result)
       await loadAll()
     } catch (err) {
@@ -131,6 +150,7 @@ export default function AdminTelemetriaSync() {
       )
     } finally {
       setSyncingDate(false)
+      setSyncProgress(null)
     }
   }
 
@@ -155,8 +175,11 @@ export default function AdminTelemetriaSync() {
 
   const handleResync = async (date: string) => {
     setResyncingDate(date)
+    setResyncProgress(null)
     try {
-      const result = await syncDay(date)
+      const result = await pollSyncDay(date, (progress) => {
+        setResyncProgress(progress)
+      })
       await loadAll()
       toast.success(
         `Ressincronização concluída: ${result.trips_processadas} trips e ${result.eventos_processados} eventos processados.`,
@@ -169,6 +192,7 @@ export default function AdminTelemetriaSync() {
       )
     } finally {
       setResyncingDate(null)
+      setResyncProgress(null)
     }
   }
 
@@ -306,20 +330,31 @@ export default function AdminTelemetriaSync() {
                             {row.duracao_segundos ? `${row.duracao_segundos}s` : '-'}
                           </TableCell>
                           <TableCell>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleResync(row.data_sincronizada)}
-                              disabled={resyncingDate === row.data_sincronizada}
-                              className="gap-1.5"
-                            >
-                              {resyncingDate === row.data_sincronizada ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <RefreshCw className="w-3.5 h-3.5" />
+                            <div className="flex flex-col gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleResync(row.data_sincronizada)}
+                                disabled={resyncingDate === row.data_sincronizada}
+                                className="gap-1.5"
+                              >
+                                {resyncingDate === row.data_sincronizada ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                )}
+                                {resyncingDate === row.data_sincronizada
+                                  ? 'Sincronizando...'
+                                  : 'Ressincronizar'}
+                              </Button>
+                              {resyncingDate === row.data_sincronizada && resyncProgress && (
+                                <span className="text-xs text-slate-500">
+                                  {getPhaseLabel(resyncProgress.fase)} ·{' '}
+                                  {resyncProgress.trips_processadas} trips ·{' '}
+                                  {resyncProgress.eventos_processados} eventos
+                                </span>
                               )}
-                              Ressincronizar
-                            </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -368,11 +403,35 @@ export default function AdminTelemetriaSync() {
                   )}
                 </Button>
                 {syncingDate && specificDate && (
-                  <p className="text-sm text-amber-600 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4" />
-                    Sincronizando dia {formatDateBr(toDateStr(specificDate))}, isso pode levar até 5
-                    minutos...
-                  </p>
+                  <div className="space-y-2">
+                    <p className="text-sm text-amber-600 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4" />
+                      Sincronizando dia {formatDateBr(toDateStr(specificDate))}...
+                    </p>
+                    {syncProgress && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs text-slate-600">
+                          <span className="font-medium">{getPhaseLabel(syncProgress.fase)}</span>
+                          <span>
+                            {syncProgress.paginas_processadas}/{syncProgress.paginas_total} páginas
+                            · {syncProgress.trips_processadas} trips ·{' '}
+                            {syncProgress.eventos_processados} eventos
+                          </span>
+                        </div>
+                        <Progress
+                          value={
+                            syncProgress.paginas_total > 0
+                              ? (syncProgress.paginas_processadas / syncProgress.paginas_total) *
+                                100
+                              : syncProgress.fase === 'processing_events'
+                                ? 50
+                                : 10
+                          }
+                          className="h-2"
+                        />
+                      </div>
+                    )}
+                  </div>
                 )}
                 {syncResult && !syncingDate && (
                   <Alert className="border-green-200 bg-green-50">
@@ -468,7 +527,10 @@ export default function AdminTelemetriaSync() {
                   <p>
                     Este endpoint deve ser chamado diariamente às 3h da manhã com a data de ontem
                     (D-1) para manter os dados sincronizados. Configure um disparador externo
-                    (Adapta Play, GitHub Actions, EasyCron) para executar essa chamada.
+                    (Adapta Play, GitHub Actions, EasyCron) para executar essa chamada. O
+                    processamento é assíncrono: a cada chamada o endpoint processa um lote de dados
+                    (~25s) e retorna o progresso. Para sincronização completa via agendador externo,
+                    chame o endpoint repetidamente até receber status "sucesso".
                   </p>
                 </div>
                 <div>

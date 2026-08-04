@@ -48,11 +48,14 @@ export interface TelemetryStats {
 export interface SyncDayResult {
   sucesso: boolean
   status: string
+  fase: string
   trips_processadas: number
   eventos_processados: number
   duracao_segundos: number
   paginas_total: number
   paginas_processadas: number
+  motoristas_encontrados: number
+  trips_restantes: number
   error?: string
 }
 
@@ -152,6 +155,34 @@ export async function syncDay(date: string): Promise<SyncDayResult> {
     throw new Error((data.error as string) || (data.erro as string) || `Erro ${res.status}`)
   }
   return data as unknown as SyncDayResult
+}
+
+export async function pollSyncDay(
+  date: string,
+  onProgress?: (result: SyncDayResult) => void,
+): Promise<SyncDayResult> {
+  let retries = 0
+  const MAX_RETRIES = 3
+  let result: SyncDayResult
+
+  do {
+    try {
+      result = await syncDay(date)
+      retries = 0
+    } catch (err) {
+      retries++
+      if (retries >= MAX_RETRIES) throw err
+      await new Promise((resolve) => setTimeout(resolve, 5000))
+      continue
+    }
+
+    if (result.status === 'em_andamento') {
+      onProgress?.(result)
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+  } while (result.status === 'em_andamento')
+
+  return result
 }
 
 export async function clearOldData(): Promise<ClearOldDataResult> {

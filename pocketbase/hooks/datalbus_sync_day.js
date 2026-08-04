@@ -39,16 +39,118 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     return e.json(400, { error: 'Data inválida. Use o formato YYYY-MM-DD.' })
   }
 
+  var TIME_LIMIT = 25000
   var startTime = Date.now()
-  var TIME_LIMIT = 280000
+
+  try {
+    $app
+      .db()
+      .newQuery(
+        'CREATE TABLE IF NOT EXISTS _datalbus_cache (id TEXT PRIMARY KEY, token TEXT, expires INTEGER)',
+      )
+      .execute()
+  } catch (_) {}
+  try {
+    $app
+      .db()
+      .newQuery(
+        'CREATE TABLE IF NOT EXISTS _datalbus_trips_cache (id TEXT PRIMARY KEY, date TEXT, trip_id TEXT, trip_json TEXT, processed INTEGER DEFAULT 0)',
+      )
+      .execute()
+  } catch (_) {}
+  try {
+    $app
+      .db()
+      .newQuery('ALTER TABLE _datalbus_trips_cache ADD COLUMN processed INTEGER DEFAULT 0')
+      .execute()
+  } catch (_) {}
 
   var syncLogCol = $app.findCollectionByNameOrId('telemetria_sync_log')
-  var logRecord = new Record(syncLogCol)
-  logRecord.set('data_sincronizada', data)
-  logRecord.set('status', 'em_andamento')
-  logRecord.set('iniciado_em', new Date().toISOString())
-  logRecord.set('tentativa', 1)
-  $app.save(logRecord)
+  var logRecord = null
+  var isResuming = false
+
+  try {
+    var existingLogs = $app.findRecordsByFilter(
+      'telemetria_sync_log',
+      'data_sincronizada = {:d}',
+      '-created',
+      1,
+      0,
+      { d: data },
+    )
+    if (existingLogs.length > 0) {
+      logRecord = existingLogs[0]
+      if (logRecord.getString('status') === 'em_andamento') {
+        isResuming = true
+      }
+    }
+  } catch (_) {}
+
+  if (!logRecord) {
+    logRecord = new Record(syncLogCol)
+    logRecord.set('data_sincronizada', data)
+    logRecord.set('status', 'em_andamento')
+    logRecord.set('iniciado_em', new Date().toISOString())
+    logRecord.set('tentativa', 1)
+    logRecord.set('paginas_total', 0)
+    logRecord.set('paginas_processadas', 0)
+    logRecord.set('trips_processadas', 0)
+    logRecord.set('eventos_processados', 0)
+    logRecord.set('motoristas_encontrados', 0)
+    $app.save(logRecord)
+  } else if (!isResuming) {
+    logRecord.set('status', 'em_andamento')
+    logRecord.set('iniciado_em', new Date().toISOString())
+    logRecord.set('concluido_em', '')
+    logRecord.set('duracao_segundos', 0)
+    logRecord.set('paginas_total', 0)
+    logRecord.set('paginas_processadas', 0)
+    logRecord.set('trips_processadas', 0)
+    logRecord.set('eventos_processados', 0)
+    logRecord.set('motoristas_encontrados', 0)
+    logRecord.set('mensagem_erro', '')
+    logRecord.set('tentativa', (logRecord.get('tentativa') || 0) + 1)
+    $app.save(logRecord)
+    try {
+      $app
+        .db()
+        .newQuery('DELETE FROM _datalbus_trips_cache WHERE date = {:d}')
+        .bind({ d: data })
+        .execute()
+    } catch (_) {}
+  }
+
+  var syncStatus = null
+  try {
+    var statusRecords = $app.findRecordsByFilter('datalbus_sync_status', 'date = {:d}', '', 1, 0, {
+      d: data,
+    })
+    if (statusRecords.length > 0) syncStatus = statusRecords[0]
+  } catch (_) {}
+
+  if (!syncStatus || !isResuming) {
+    var statusCol = $app.findCollectionByNameOrId('datalbus_sync_status')
+    if (!syncStatus) {
+      syncStatus = new Record(statusCol)
+      syncStatus.set('date', data)
+    }
+    syncStatus.set('total_pages', 0)
+    syncStatus.set('pages_processed', JSON.stringify([]))
+    syncStatus.set('status', 'fetching_trips')
+    syncStatus.set('updated_at', new Date().toISOString())
+    $app.save(syncStatus)
+  }
+
+  var totalPages = syncStatus.get('total_pages') || 0
+  var pagesProcessed = []
+  try {
+    pagesProcessed = JSON.parse(syncStatus.getString('pages_processed')) || []
+  } catch (_) {
+    pagesProcessed = []
+  }
+  var phase = syncStatus.getString('status') || 'fetching_trips'
+  var tripsProcessed = logRecord.get('trips_processadas') || 0
+  var eventosProcessed = logRecord.get('eventos_processados') || 0
 
   var dbEmail = $secrets.get('DATALBUS_EMAIL') || ''
   var dbPass = $secrets.get('DATALBUS_PASSWORD') || ''
@@ -61,15 +163,6 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     $app.save(logRecord)
     return e.json(500, { error: 'Credenciais DataBus não configuradas.' })
   }
-
-  try {
-    $app
-      .db()
-      .newQuery(
-        'CREATE TABLE IF NOT EXISTS _datalbus_cache (id TEXT PRIMARY KEY, token TEXT, expires INTEGER)',
-      )
-      .execute()
-  } catch (_) {}
 
   var currentToken = ''
   try {
@@ -171,6 +264,21 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     return []
   }
 
+  function cacheTrip(trip, dateStr) {
+    var tripId = String(trip.id || trip.trip_id || trip.tripId || '')
+    if (!tripId) return
+    var cacheId = dateStr + ':' + tripId
+    try {
+      $app
+        .db()
+        .newQuery(
+          'INSERT OR REPLACE INTO _datalbus_trips_cache (id, date, trip_id, trip_json, processed) VALUES ({:id}, {:date}, {:tripId}, {:json}, 0)',
+        )
+        .bind({ id: cacheId, date: dateStr, tripId: tripId, json: JSON.stringify(trip) })
+        .execute()
+    } catch (_) {}
+  }
+
   var DRIVING_EVENTS = {
     'excesso de velocidade': true,
     'freada brusca': true,
@@ -183,27 +291,18 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     'ponto de força': true,
   }
 
-  var totalPages = 0,
-    pagesProcessed = 0,
-    tripsProcessed = 0,
-    eventosProcessed = 0
-  var uniqueWorkers = {},
-    tripWorkers = {}
-  var isPartial = false
   var nowIso = new Date().toISOString()
 
   function upsertTrip(trip) {
     var tripId = parseInt(String(trip.id || trip.trip_id || trip.tripId || '0'), 10)
-    if (!tripId) return
+    if (!tripId) return 0
     var subtrips = trip.subtrips || trip.sub_trips || trip.subTrips || []
-    if (!tripWorkers[tripId]) tripWorkers[tripId] = []
-    if (!Array.isArray(subtrips) || subtrips.length === 0) return
+    if (!Array.isArray(subtrips) || subtrips.length === 0) return 0
+    var count = 0
     for (var s = 0; s < subtrips.length; s++) {
       var sub = subtrips[s]
       var workerId = parseInt(String(sub.worker_id || '0'), 10)
       if (!workerId) continue
-      if (tripWorkers[tripId].indexOf(workerId) === -1) tripWorkers[tripId].push(workerId)
-      uniqueWorkers[workerId] = true
       try {
         $app
           .db()
@@ -230,9 +329,10 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
             n: nowIso,
           })
           .execute()
-        tripsProcessed++
+        count++
       } catch (_) {}
     }
+    return count
   }
 
   function upsertEvent(ev, tripId, workerId) {
@@ -276,97 +376,195 @@ routerAdd('POST', '/backend/v1/datalbus/sync-day', (e) => {
     } catch (_) {}
   }
 
-  try {
-    var firstRes = apiGet(
-      'https://datalbus.com.br:8000/api/v2/trips?date=' +
-        encodeURIComponent(data) +
-        '&per_page=100&page=1',
-    )
-    if (firstRes.statusCode !== 200 || !firstRes.json)
-      throw new Error('Falha ao buscar trips: ' + firstRes.statusCode)
-    var respObj = firstRes.json
-    totalPages =
-      respObj.last_page || respObj.total_pages || (respObj.meta && respObj.meta.last_page) || 1
-    pagesProcessed = 1
-    var tripsArr = extractArray(respObj)
-    for (var i = 0; i < tripsArr.length; i++) upsertTrip(tripsArr[i])
+  if (phase === 'fetching_trips') {
+    if (totalPages === 0) {
+      var firstRes = apiGet(
+        'https://datalbus.com.br:8000/api/v2/trips?date=' +
+          encodeURIComponent(data) +
+          '&per_page=100&page=1',
+      )
+      if (firstRes.statusCode !== 200 || !firstRes.json) {
+        logRecord.set('status', 'erro')
+        logRecord.set('concluido_em', new Date().toISOString())
+        logRecord.set('mensagem_erro', 'Falha ao buscar trips: ' + firstRes.statusCode)
+        $app.save(logRecord)
+        return e.json(502, { error: 'Falha ao buscar viagens da API DataBus.' })
+      }
+      var respObj = firstRes.json
+      totalPages =
+        respObj.last_page || respObj.total_pages || (respObj.meta && respObj.meta.last_page) || 1
+      syncStatus.set('total_pages', totalPages)
+      var tripsArr = extractArray(respObj)
+      for (var i = 0; i < tripsArr.length; i++) cacheTrip(tripsArr[i], data)
+      pagesProcessed.push(1)
+    }
 
     for (var page = 2; page <= totalPages; page++) {
-      if (Date.now() - startTime > TIME_LIMIT) {
-        isPartial = true
-        break
-      }
+      if (Date.now() - startTime > TIME_LIMIT) break
+      if (pagesProcessed.indexOf(page) !== -1) continue
       var pageRes = apiGet(
         'https://datalbus.com.br:8000/api/v2/trips?date=' +
           encodeURIComponent(data) +
           '&per_page=100&page=' +
           page,
       )
-      if (pageRes.statusCode !== 200 || !pageRes.json) continue
-      pagesProcessed++
-      var pageTrips = extractArray(pageRes.json)
-      for (var j = 0; j < pageTrips.length; j++) upsertTrip(pageTrips[j])
+      if (pageRes.statusCode === 200 && pageRes.json) {
+        var pageTrips = extractArray(pageRes.json)
+        for (var j = 0; j < pageTrips.length; j++) cacheTrip(pageTrips[j], data)
+        pagesProcessed.push(page)
+      }
     }
 
-    var tripIds = Object.keys(tripWorkers)
-    for (var k = 0; k < tripIds.length; k++) {
-      if (Date.now() - startTime > TIME_LIMIT) {
-        isPartial = true
-        break
+    syncStatus.set('pages_processed', JSON.stringify(pagesProcessed))
+    syncStatus.set('updated_at', new Date().toISOString())
+    $app.save(syncStatus)
+
+    if (pagesProcessed.length >= totalPages) {
+      phase = 'processing_events'
+      syncStatus.set('status', 'processing_events')
+      syncStatus.set('updated_at', new Date().toISOString())
+      $app.save(syncStatus)
+    }
+  }
+
+  if (phase === 'processing_events') {
+    var batchRows = []
+    try {
+      batchRows = $app
+        .db()
+        .newQuery(
+          'SELECT id, trip_json FROM _datalbus_trips_cache WHERE date = {:d} AND (processed = 0 OR processed IS NULL) LIMIT 20',
+        )
+        .bind({ d: data })
+        .all(new DynamicModel({ id: '', trip_json: '' }))
+    } catch (_) {
+      batchRows = []
+    }
+    if (!Array.isArray(batchRows)) batchRows = []
+
+    for (var r = 0; r < batchRows.length; r++) {
+      if (Date.now() - startTime > TIME_LIMIT) break
+      var row = batchRows[r]
+      var trip = null
+      try {
+        trip = JSON.parse(row.trip_json)
+      } catch (_) {
+        trip = null
       }
-      var tid = parseInt(tripIds[k], 10)
-      var workers = tripWorkers[tid] || []
-      var defaultWorker = workers.length > 0 ? workers[0] : 0
+      if (!trip) {
+        try {
+          $app
+            .db()
+            .newQuery('UPDATE _datalbus_trips_cache SET processed = 1 WHERE id = {:id}')
+            .bind({ id: row.id })
+            .execute()
+        } catch (_) {}
+        continue
+      }
+      var upsertedCount = upsertTrip(trip)
+      tripsProcessed += upsertedCount
+
+      var tripIdNum = parseInt(String(trip.id || trip.trip_id || trip.tripId || '0'), 10)
+      var subtrips = trip.subtrips || trip.sub_trips || trip.subTrips || []
+      var defaultWorker = 0
+      if (Array.isArray(subtrips) && subtrips.length > 0) {
+        defaultWorker = parseInt(String(subtrips[0].worker_id || '0'), 10) || 0
+      }
+
       var evRes = apiGet(
         'https://datalbus.com.br:8000/api/v2/trips/' +
-          encodeURIComponent(String(tid)) +
+          encodeURIComponent(String(tripIdNum)) +
           '/events?date=' +
           encodeURIComponent(data) +
           '&per_page=100',
       )
-      if (evRes.statusCode !== 200 || !evRes.json) continue
-      var events = extractArray(evRes.json)
-      for (var m = 0; m < events.length; m++) {
-        var ev = events[m]
-        var evWorker = parseInt(String(ev.worker_id || '0'), 10) || defaultWorker
-        upsertEvent(ev, tid, evWorker)
+      if (evRes.statusCode === 200 && evRes.json) {
+        var events = extractArray(evRes.json)
+        for (var m = 0; m < events.length; m++) {
+          var ev = events[m]
+          var evWorker = parseInt(String(ev.worker_id || '0'), 10) || defaultWorker
+          upsertEvent(ev, tripIdNum, evWorker)
+        }
       }
+
+      try {
+        $app
+          .db()
+          .newQuery('UPDATE _datalbus_trips_cache SET processed = 1 WHERE id = {:id}')
+          .bind({ id: row.id })
+          .execute()
+      } catch (_) {}
     }
-
-    var status = isPartial ? 'parcial' : 'sucesso'
-    logRecord.set('status', status)
-    logRecord.set('concluido_em', new Date().toISOString())
-    logRecord.set('duracao_segundos', Math.floor((Date.now() - startTime) / 1000))
-    logRecord.set('paginas_total', totalPages)
-    logRecord.set('paginas_processadas', pagesProcessed)
-    logRecord.set('trips_processadas', tripsProcessed)
-    logRecord.set('motoristas_encontrados', Object.keys(uniqueWorkers).length)
-    logRecord.set('eventos_processados', eventosProcessed)
-    if (isPartial) logRecord.set('mensagem_erro', 'Sincronização interrompida por tempo limite')
-    $app.save(logRecord)
-
-    return e.json(200, {
-      sucesso: !isPartial,
-      status: status,
-      trips_processadas: tripsProcessed,
-      eventos_processados: eventosProcessed,
-      duracao_segundos: Math.floor((Date.now() - startTime) / 1000),
-      paginas_total: totalPages,
-      paginas_processadas: pagesProcessed,
-    })
-  } catch (err) {
-    logRecord.set('status', 'erro')
-    logRecord.set('concluido_em', new Date().toISOString())
-    logRecord.set('duracao_segundos', Math.floor((Date.now() - startTime) / 1000))
-    logRecord.set('mensagem_erro', String(err).substring(0, 500))
-    logRecord.set('trips_processadas', tripsProcessed)
-    logRecord.set('eventos_processados', eventosProcessed)
-    $app.save(logRecord)
-    return e.json(500, {
-      sucesso: false,
-      error: String(err),
-      trips_processadas: tripsProcessed,
-      eventos_processados: eventosProcessed,
-    })
   }
+
+  var motoristasEncontrados = 0
+  try {
+    var motoristasModel = new DynamicModel({ cnt: 0 })
+    $app
+      .db()
+      .newQuery('SELECT COUNT(DISTINCT worker_id) as cnt FROM telemetria_trips WHERE data = {:d}')
+      .bind({ d: data })
+      .one(motoristasModel)
+    motoristasEncontrados = motoristasModel.cnt || 0
+  } catch (_) {}
+
+  var remainingTrips = 0
+  try {
+    var remModel = new DynamicModel({ cnt: 0 })
+    $app
+      .db()
+      .newQuery(
+        'SELECT COUNT(*) as cnt FROM _datalbus_trips_cache WHERE date = {:d} AND (processed = 0 OR processed IS NULL)',
+      )
+      .bind({ d: data })
+      .one(remModel)
+    remainingTrips = remModel.cnt || 0
+  } catch (_) {}
+
+  var isComplete = phase === 'processing_events' && remainingTrips === 0
+  var finalStatus = isComplete ? 'sucesso' : 'em_andamento'
+
+  if (isComplete) {
+    try {
+      $app
+        .db()
+        .newQuery('DELETE FROM _datalbus_trips_cache WHERE date = {:d}')
+        .bind({ d: data })
+        .execute()
+    } catch (_) {}
+  }
+
+  logRecord.set('status', finalStatus)
+  logRecord.set('paginas_total', totalPages)
+  logRecord.set('paginas_processadas', pagesProcessed.length)
+  logRecord.set('trips_processadas', tripsProcessed)
+  logRecord.set('eventos_processados', eventosProcessed)
+  logRecord.set('motoristas_encontrados', motoristasEncontrados)
+  if (isComplete) {
+    logRecord.set('concluido_em', new Date().toISOString())
+    logRecord.set(
+      'duracao_segundos',
+      Math.floor((Date.now() - new Date(logRecord.getString('iniciado_em')).getTime()) / 1000),
+    )
+  }
+  $app.save(logRecord)
+
+  if (isComplete) {
+    syncStatus.set('status', 'completed')
+    syncStatus.set('updated_at', new Date().toISOString())
+    $app.save(syncStatus)
+  }
+
+  return e.json(200, {
+    sucesso: isComplete,
+    status: finalStatus,
+    fase: isComplete ? 'completed' : phase,
+    trips_processadas: tripsProcessed,
+    eventos_processados: eventosProcessed,
+    duracao_segundos: Math.floor((Date.now() - startTime) / 1000),
+    paginas_total: totalPages,
+    paginas_processadas: pagesProcessed.length,
+    motoristas_encontrados: motoristasEncontrados,
+    trips_restantes: remainingTrips,
+  })
 })
