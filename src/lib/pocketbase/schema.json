@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-04T13:35:06.672Z",
+  "generatedAt": "2026-08-04T14:37:12.027Z",
   "collections": [
     {
       "name": "users",
@@ -482,6 +482,344 @@
       ],
       "indexes": [
         "CREATE UNIQUE INDEX idx_datalbus_sync_status_date ON datalbus_sync_status (date)"
+      ]
+    },
+    {
+      "name": "telemetria_trips",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\"",
+        "delete": "@request.auth.id != \"\""
+      },
+      "fields": [
+        {
+          "name": "trip_id",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "worker_id",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "driver_name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "asset_id",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "mileage",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fuel_used",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "drive_duration",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "line_name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "start_time",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "end_time",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "raw_data",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sincronizado_em",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_telemetria_trips_worker_data ON telemetria_trips (worker_id, data)",
+        "CREATE UNIQUE INDEX idx_telemetria_trips_trip_worker ON telemetria_trips (trip_id, worker_id)"
+      ]
+    },
+    {
+      "name": "telemetria_eventos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\"",
+        "delete": "@request.auth.id != \"\""
+      },
+      "fields": [
+        {
+          "name": "evento_id",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "trip_id",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "worker_id",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_hora",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "asset_id",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_evento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "event_type_id",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "categoria",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "duracao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "quantidade",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "latitude",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "longitude",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "classificacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "raw_data",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sincronizado_em",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_telemetria_eventos_worker_data_class ON telemetria_eventos (worker_id, data, classificacao)",
+        "CREATE UNIQUE INDEX idx_telemetria_eventos_evento ON telemetria_eventos (evento_id)"
+      ]
+    },
+    {
+      "name": "telemetria_sync_log",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\"",
+        "delete": "@request.auth.id != \"\""
+      },
+      "fields": [
+        {
+          "name": "data_sincronizada",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "iniciado_em",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "concluido_em",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "duracao_segundos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "paginas_total",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "paginas_processadas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "trips_processadas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "motoristas_encontrados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "eventos_processados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "mensagem_erro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tentativa",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_telemetria_sync_log_data ON telemetria_sync_log (data_sincronizada)"
       ]
     }
   ]

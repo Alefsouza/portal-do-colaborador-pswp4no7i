@@ -9,6 +9,7 @@ import {
   Bell,
   LogOut,
   Users,
+  RefreshCw,
 } from 'lucide-react'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
 import { useNavigate } from 'react-router-dom'
@@ -52,6 +53,15 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
     { label: 'Agendamentos', to: '/admin/agendamentos', icon: CalendarClock },
     { label: 'Informativos', to: '/admin/informativos', icon: Megaphone },
     { label: 'Pop-ups', to: '/admin/popups', icon: Bell },
+    ...(user?.perfil === 'TI' || user?.perfil === 'Admin'
+      ? [
+          {
+            label: 'Sincronização Telemetria',
+            to: '/admin/telemetria/sincronizacao',
+            icon: RefreshCw,
+          },
+        ]
+      : []),
     ...(user?.perfil === 'TI'
       ? [{ label: 'Gerenciar Usuários', to: '/admin/usuarios', icon: Users }]
       : []),

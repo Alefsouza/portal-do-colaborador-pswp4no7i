@@ -26,13 +26,15 @@ export interface TelemetryScore {
 }
 
 export interface TelemetryResumo {
-  total_eventos: number
+  total_eventos_direcao: number
+  total_eventos?: number
   por_tipo: Record<string, number>
 }
 
 export interface TelemetryMetricas {
   total_viagens: number
-  distancia_total: string
+  distancia_total_km: number
+  distancia_total?: string
   duracao_total: string
 }
 
@@ -51,12 +53,14 @@ export interface TelemetryDebug {
 }
 
 export interface TelemetryRecord {
+  sincronizado?: boolean
+  mensagem?: string
   pontuacao: TelemetryScore | number | null
   eventos_direcao: TelemetryEvent[]
   eventos_tecnicos: TelemetryEvent[]
   resumo: TelemetryResumo
   metricas: TelemetryMetricas
-  debug: TelemetryDebug
+  debug?: TelemetryDebug
 }
 
 export interface TelemetryQuery {
@@ -103,15 +107,16 @@ export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRe
       method: 'POST',
       body: { data: query.data, worker_id: query.workerId },
     })
-    if (res && res.needs_sync) {
-      throw new NeedsSyncError(res.message || 'Esta data precisa ser sincronizada.')
+    if (res && res.sincronizado === false) {
+      throw new NeedsSyncError(res.mensagem || 'Esta data precisa ser sincronizada.')
     }
     return res as TelemetryRecord
   } catch (err) {
     if (err instanceof NeedsSyncError) throw err
     if (err instanceof ClientResponseError) {
-      const response = err.response as { error?: string }
-      if (response?.error) throw new Error(response.error)
+      const response = err.response as { error?: string; erro?: string }
+      const msg = response?.error || response?.erro
+      if (msg) throw new Error(msg)
     }
     throw new Error(FALLBACK_MESSAGE)
   }

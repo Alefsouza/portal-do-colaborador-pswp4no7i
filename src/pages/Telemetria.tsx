@@ -1,16 +1,15 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Loader2,
   Search,
   AlertCircle,
-  AlertTriangle,
   Gauge,
   Route,
   Clock,
   MapPin,
   Terminal,
-  CheckCircle2,
   Wrench,
+  Info,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -28,7 +27,6 @@ import {
 } from '@/components/ui/table'
 import {
   fetchTelemetry,
-  TELEMETRY_TIMEOUT_MS,
   NeedsSyncError,
   type TelemetryRecord,
   type TelemetryEvent,
@@ -41,104 +39,17 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { SyncModal } from '@/components/telemetria/SyncModal'
-
-function toDateStr(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function formatEventDate(dateStr: string): string {
-  if (!dateStr) return '-'
-  const cleaned = dateStr.replace('T', ' ')
-  const [datePart, timePart] = cleaned.split(' ')
-  if (!datePart) return dateStr
-  const [y, m, d] = datePart.split('-')
-  if (!y || !m || !d) return dateStr
-  const time = timePart ? timePart.substring(0, 5) : '00:00'
-  return `${d}/${m}/${y} ${time}`
-}
-
-function formatDuration(duracao: number | string | undefined): string {
-  if (duracao === undefined || duracao === null || duracao === '') return '-'
-  const seconds = typeof duracao === 'string' ? parseInt(duracao, 10) : duracao
-  if (isNaN(seconds) || seconds <= 0) return '-'
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
-}
-
-function formatDriveDuration(durationStr: string): string {
-  if (!durationStr || durationStr === '00:00:00') return '-'
-  const parts = durationStr.split(':')
-  if (parts.length !== 3) return durationStr
-  const hours = parseInt(parts[0], 10)
-  const minutes = parseInt(parts[1], 10)
-  if (hours > 0) return `${hours}h ${minutes}m`
-  return `${minutes}m`
-}
-
-function extractScore(p: TelemetryRecord['pontuacao']): number | null {
-  if (typeof p === 'number') return p
-  if (!p || typeof p !== 'object') return null
-  const keys = ['score', 'pontuacao', 'total', 'valor', 'nota', 'overall_score', 'total_score']
-  for (const k of keys) {
-    if (typeof p[k] === 'number') return p[k] as number
-  }
-  for (const v of Object.values(p)) {
-    if (typeof v === 'number' && v >= 0 && v <= 100) return v
-  }
-  return null
-}
-
-function extractDistance(p: TelemetryRecord['pontuacao']): number | null {
-  if (!p || typeof p !== 'object') return null
-  const keys = [
-    'distance',
-    'distancia',
-    'km',
-    'total_distance',
-    'km_rodado',
-    'total_km',
-    'kilometers',
-  ]
-  for (const k of keys) {
-    const v = p[k]
-    if (typeof v === 'number' && v > 0) return v
-    if (typeof v === 'string') {
-      const parsed = parseFloat(v)
-      if (!isNaN(parsed) && parsed > 0) return parsed
-    }
-  }
-  return null
-}
-
-function getScoreBg(score: number): string {
-  if (score >= 80) return 'bg-green-500'
-  if (score >= 60) return 'bg-amber-500'
-  return 'bg-red-500'
-}
-
-function getScoreLabel(score: number): string {
-  if (score >= 80) return 'Excelente'
-  if (score >= 60) return 'Médio'
-  return 'Baixo'
-}
-
-function getEventBadgeClass(tipo: string): string {
-  const l = tipo.toLowerCase()
-  if (l.includes('velocidade')) return 'bg-red-100 text-red-700 border-red-200'
-  if (l.includes('freada') || l.includes('frenagem'))
-    return 'bg-orange-100 text-orange-700 border-orange-200'
-  if (l.includes('acelera')) return 'bg-yellow-100 text-yellow-700 border-yellow-200'
-  if (l.includes('celular')) return 'bg-purple-100 text-purple-700 border-purple-200'
-  if (l.includes('curva') || l.includes('desconforto'))
-    return 'bg-blue-100 text-blue-700 border-blue-200'
-  return 'bg-slate-100 text-slate-700 border-slate-200'
-}
+import {
+  toDateStr,
+  formatEventDate,
+  formatDuration,
+  formatDriveDuration,
+  extractScore,
+  extractDistance,
+  getScoreBg,
+  getScoreLabel,
+  getEventBadgeClass,
+} from '@/lib/telemetry-utils'
 
 export default function Telemetria() {
   const { user } = useAuth()
@@ -148,11 +59,9 @@ export default function Telemetria() {
   const [hasConsulted, setHasConsulted] = useState(false)
   const [error, setError] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const [needsSync, setNeedsSync] = useState(false)
   const [workerId, setWorkerId] = useState<string>('')
   const [showTechnicalEvents, setShowTechnicalEvents] = useState(false)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [syncModalOpen, setSyncModalOpen] = useState(false)
-  const [syncDate, setSyncDate] = useState('')
 
   useEffect(() => {
     if (!user?.id) return
@@ -160,21 +69,26 @@ export default function Telemetria() {
       .getOne(user.id)
       .then((record) => {
         const reg = (record as Record<string, unknown>).registro as string
-        if (reg) {
-          setWorkerId(String(parseInt(reg, 10)))
-        }
+        if (reg) setWorkerId(String(parseInt(reg, 10)))
       })
       .catch(() => {})
   }, [user?.id])
 
   const isValid = useMemo(() => !!selectedDate && !!workerId, [selectedDate, workerId])
 
+  const datePickerDisabled = (date: Date) => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const thirtyDaysAgo = new Date(today)
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    return date < thirtyDaysAgo || date > yesterday
+  }
+
   const score = useMemo(() => extractScore(results?.pontuacao), [results])
   const distance = useMemo(() => {
-    if (results?.metricas?.distancia_total) {
-      const parsed = parseFloat(results.metricas.distancia_total)
-      if (!isNaN(parsed)) return parsed
-    }
+    if (results?.metricas?.distancia_total_km != null) return results.metricas.distancia_total_km
     return extractDistance(results?.pontuacao)
   }, [results])
   const totalViagens = useMemo(() => results?.metricas?.total_viagens ?? 0, [results])
@@ -193,106 +107,28 @@ export default function Telemetria() {
     setError(false)
     setErrorMessage('')
     setResults(null)
+    setNeedsSync(false)
     setShowTechnicalEvents(false)
     setHasConsulted(false)
 
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    timeoutRef.current = setTimeout(() => {
-      setLoading(false)
-      setError(true)
-      setErrorMessage('A consulta excedeu o tempo limite. Tente novamente ou selecione outra data.')
-    }, TELEMETRY_TIMEOUT_MS)
-
     try {
-      const data = await fetchTelemetry({
-        data: toDateStr(selectedDate),
-        workerId,
-      })
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
+      const data = await fetchTelemetry({ data: toDateStr(selectedDate), workerId })
       setResults(data)
       setHasConsulted(true)
     } catch (err) {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
       if (err instanceof NeedsSyncError) {
-        setSyncDate(toDateStr(selectedDate))
-        setSyncModalOpen(true)
+        setNeedsSync(true)
       } else {
         setError(true)
         const fallback = 'Não foi possível carregar os dados de telemetria. Tente novamente.'
-        if (err instanceof Error && err.message) {
-          setErrorMessage(err.message)
-        } else {
-          setErrorMessage(fallback)
-        }
+        setErrorMessage(err instanceof Error && err.message ? err.message : fallback)
       }
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSyncComplete = async () => {
-    setSyncModalOpen(false)
-    if (!selectedDate || !workerId) return
-    setLoading(true)
-    setError(false)
-    setErrorMessage('')
-    setResults(null)
-    setShowTechnicalEvents(false)
-    setHasConsulted(false)
-
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    timeoutRef.current = setTimeout(() => {
-      setLoading(false)
-      setError(true)
-      setErrorMessage('A consulta excedeu o tempo limite. Tente novamente.')
-    }, TELEMETRY_TIMEOUT_MS)
-
-    try {
-      const data = await fetchTelemetry({
-        data: toDateStr(selectedDate),
-        workerId,
-      })
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-      setResults(data)
-      setHasConsulted(true)
-    } catch (err) {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-      if (err instanceof NeedsSyncError) {
-        setSyncDate(toDateStr(selectedDate))
-        setSyncModalOpen(true)
-      } else {
-        setError(true)
-        const fallback = 'Não foi possível carregar os dados de telemetria. Tente novamente.'
-        if (err instanceof Error && err.message) {
-          setErrorMessage(err.message)
-        } else {
-          setErrorMessage(fallback)
-        }
-      }
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    }
-  }, [])
-
-  const renderEventsTable = (events: TelemetryEvent[], isTechnical: boolean) => (
+  const renderEventsTable = (events: TelemetryEvent[]) => (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
@@ -345,12 +181,6 @@ export default function Telemetria() {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      <SyncModal
-        open={syncModalOpen}
-        date={syncDate}
-        onClose={() => setSyncModalOpen(false)}
-        onSyncComplete={handleSyncComplete}
-      />
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
           <Gauge className="w-6 h-6 text-primary" />
@@ -372,10 +202,15 @@ export default function Telemetria() {
                 value={selectedDate}
                 onChange={setSelectedDate}
                 placeholder="dd/mm/aaaa"
+                disabled={datePickerDisabled}
               />
+              <p className="text-xs text-amber-600 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 shrink-0" />
+                Dados disponíveis apenas dos últimos 30 dias. Eventos de hoje ficam disponíveis a
+                partir de amanhã.
+              </p>
             </div>
           </div>
-
           <Button
             onClick={handleConsult}
             disabled={!isValid || loading}
@@ -417,16 +252,18 @@ export default function Telemetria() {
         </Alert>
       )}
 
-      {hasConsulted && !loading && !error && results && (
-        <>
-          {results.debug?.aviso && (
-            <Alert className="border-amber-200 bg-amber-50">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <AlertTitle className="text-amber-800">Aviso</AlertTitle>
-              <AlertDescription className="text-amber-700">{results.debug.aviso}</AlertDescription>
-            </Alert>
-          )}
+      {needsSync && !loading && (
+        <Alert className="border-blue-200 bg-blue-50">
+          <Info className="w-5 h-5 text-blue-600" />
+          <AlertTitle className="text-blue-800">Aguarde</AlertTitle>
+          <AlertDescription className="text-blue-700">
+            Os dados desta data ainda estão sendo processados. Tente novamente em alguns minutos.
+          </AlertDescription>
+        </Alert>
+      )}
 
+      {hasConsulted && !loading && !error && !needsSync && results && (
+        <>
           {score !== null && (
             <Card className="border-slate-200">
               <CardContent className="p-6">
@@ -505,13 +342,6 @@ export default function Telemetria() {
             <Card className="border-slate-200">
               <CardContent className="py-12 text-center">
                 <p className="text-slate-500">Nenhuma viagem encontrada para esta data.</p>
-                {results.debug && !results.debug.completo && (
-                  <p className="text-sm text-amber-600 mt-2">
-                    O processamento não foi concluído (páginas processadas:{' '}
-                    {results.debug.paginas_processadas} de {results.debug.paginas_total}). Tente
-                    consultar novamente para processar as páginas restantes.
-                  </p>
-                )}
               </CardContent>
             </Card>
           ) : sortedDrivingEvents.length > 0 ? (
@@ -523,20 +353,13 @@ export default function Telemetria() {
                     {sortedDrivingEvents.length} registro(s) encontrado(s)
                   </p>
                 </div>
-                {renderEventsTable(sortedDrivingEvents, false)}
+                {renderEventsTable(sortedDrivingEvents)}
               </CardContent>
             </Card>
           ) : (
             <Card className="border-slate-200">
               <CardContent className="py-12 text-center">
                 <p className="text-slate-500">Nenhum evento de direção registrado nesta data.</p>
-                {results.debug && !results.debug.completo && (
-                  <p className="text-sm text-amber-600 mt-2">
-                    O processamento não foi concluído (páginas processadas:{' '}
-                    {results.debug.paginas_processadas} de {results.debug.paginas_total}). Tente
-                    consultar novamente para processar as páginas restantes.
-                  </p>
-                )}
               </CardContent>
             </Card>
           )}
@@ -560,7 +383,7 @@ export default function Telemetria() {
                         {sortedTechnicalEvents.length} registro(s) encontrado(s)
                       </p>
                     </div>
-                    {renderEventsTable(sortedTechnicalEvents, true)}
+                    {renderEventsTable(sortedTechnicalEvents)}
                   </CardContent>
                 </Card>
               )}
@@ -579,55 +402,47 @@ export default function Telemetria() {
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-6 pb-4">
-                      <div className="space-y-4">
-                        <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-                            <span className="text-slate-600">
-                              <strong>Worker ID:</strong> {results.debug.worker_id ?? '-'}
-                            </span>
-                            <span className="text-slate-600">
-                              <strong>Data:</strong> {results.debug.data ?? '-'}
-                            </span>
-                            <span className="text-slate-600">
-                              <strong>Status:</strong>{' '}
-                              {results.debug.completo ? (
-                                <span className="text-green-600 font-medium">Completo</span>
-                              ) : (
-                                <span className="text-amber-600 font-medium">Parcial</span>
-                              )}
-                            </span>
-                            <span className="text-slate-600">
-                              <strong>Páginas:</strong> {results.debug.paginas_processadas ?? 0} de{' '}
-                              {results.debug.paginas_total ?? 0}
-                            </span>
-                            <span className="text-slate-600">
-                              <strong>Páginas restantes:</strong>{' '}
-                              {results.debug.paginas_restantes ?? 0}
-                            </span>
-                            <span className="text-slate-600">
-                              <strong>Trips do dia:</strong> {results.debug.trips_total_dia ?? 0}
-                            </span>
-                            <span className="text-slate-600">
-                              <strong>Trips varridas:</strong> {results.debug.trips_varridas ?? 0}
-                            </span>
-                            <span className="text-slate-600">
-                              <strong>Trips encontradas:</strong>{' '}
-                              {results.debug.trips_encontradas ?? 0}
-                            </span>
-                            <span className="text-slate-600">
-                              <strong>Tempo:</strong>{' '}
-                              {results.debug.tempo_segundos != null
-                                ? `${results.debug.tempo_segundos.toFixed(1)}s`
-                                : '-'}
-                            </span>
-                          </div>
+                      <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                          <span className="text-slate-600">
+                            <strong>Worker ID:</strong> {results.debug.worker_id ?? '-'}
+                          </span>
+                          <span className="text-slate-600">
+                            <strong>Data:</strong> {results.debug.data ?? '-'}
+                          </span>
+                          <span className="text-slate-600">
+                            <strong>Status:</strong>{' '}
+                            {results.debug.completo ? (
+                              <span className="text-green-600 font-medium">Completo</span>
+                            ) : (
+                              <span className="text-amber-600 font-medium">Parcial</span>
+                            )}
+                          </span>
+                          <span className="text-slate-600">
+                            <strong>Páginas:</strong> {results.debug.paginas_processadas ?? 0} de{' '}
+                            {results.debug.paginas_total ?? 0}
+                          </span>
+                          <span className="text-slate-600">
+                            <strong>Páginas restantes:</strong>{' '}
+                            {results.debug.paginas_restantes ?? 0}
+                          </span>
+                          <span className="text-slate-600">
+                            <strong>Trips do dia:</strong> {results.debug.trips_total_dia ?? 0}
+                          </span>
+                          <span className="text-slate-600">
+                            <strong>Trips varridas:</strong> {results.debug.trips_varridas ?? 0}
+                          </span>
+                          <span className="text-slate-600">
+                            <strong>Trips encontradas:</strong>{' '}
+                            {results.debug.trips_encontradas ?? 0}
+                          </span>
+                          <span className="text-slate-600">
+                            <strong>Tempo:</strong>{' '}
+                            {results.debug.tempo_segundos != null
+                              ? `${results.debug.tempo_segundos.toFixed(1)}s`
+                              : '-'}
+                          </span>
                         </div>
-                        {results.debug.aviso && (
-                          <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 flex items-start gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                            <p className="text-sm text-amber-700">{results.debug.aviso}</p>
-                          </div>
-                        )}
                       </div>
                     </AccordionContent>
                   </AccordionItem>

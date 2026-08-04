@@ -27,6 +27,7 @@ import AdminAgendamentos from './pages/admin/AdminAgendamentos'
 import AdminInformativos from './pages/admin/AdminInformativos'
 import AdminPopups from './pages/admin/AdminPopups'
 import AdminUsuarios from './pages/admin/AdminUsuarios'
+import AdminTelemetriaSync from './pages/admin/AdminTelemetriaSync'
 
 function ProtectedRoute() {
   const { isAuthenticated, needsPasswordChange } = useAuth()
@@ -74,6 +75,7 @@ const App = () => (
                 <Route path="/admin/informativos" element={<AdminInformativos />} />
                 <Route path="/admin/popups" element={<AdminPopups />} />
                 <Route path="/admin/usuarios" element={<AdminUsuarios />} />
+                <Route path="/admin/telemetria/sincronizacao" element={<AdminTelemetriaSync />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
