@@ -41,16 +41,32 @@ export interface TelemetryError {
 
 export interface TelemetryDebugCall {
   endpoint: string
-  params: Record<string, string>
   statusCode: number
-  responseFirstLine: string
+  responsePreview: string
+}
+
+export interface TelemetryFilterTest {
+  name: string
+  url: string
+  statusCode: number
+  tripsReturned: number
+  matchedTrips: number
+  worked: boolean
+  error?: string
 }
 
 export interface TelemetryDebug {
   calls: TelemetryDebugCall[]
   errors: TelemetryError[]
-  worker_id?: string | number
+  filter_tests?: TelemetryFilterTest[]
+  variation_used?: string
+  total_trips_scanned?: number
+  trips_found?: number
+  pages_processed?: number
   pages_traversed?: number
+  data_source?: string
+  processing_time_seconds?: number
+  worker_id?: string | number
 }
 
 export interface TelemetryRecord {

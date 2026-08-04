@@ -9,6 +9,9 @@ import {
   Clock,
   MapPin,
   Terminal,
+  Filter,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -468,7 +471,7 @@ export default function Telemetria() {
                 {totalViagens === 0 && (
                   <p className="text-sm text-slate-400 mt-2">
                     Worker ID: {workerId} | Páginas consultadas:{' '}
-                    {results.debug?.pages_traversed ?? 0}
+                    {results.debug?.pages_processed ?? results.debug?.pages_traversed ?? 0}
                   </p>
                 )}
               </CardContent>
@@ -489,16 +492,90 @@ export default function Telemetria() {
                     <AccordionContent className="px-6 pb-4">
                       <div className="space-y-4">
                         <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                          <div className="flex flex-wrap gap-4 text-sm">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                             <span className="text-slate-600">
                               <strong>Worker ID:</strong> {results.debug.worker_id ?? '-'}
                             </span>
                             <span className="text-slate-600">
-                              <strong>Páginas consultadas:</strong>{' '}
-                              {results.debug.pages_traversed ?? 0}
+                              <strong>Variação usada:</strong>{' '}
+                              <Badge variant="outline" className="ml-1 text-xs">
+                                {results.debug.variation_used ?? 'none'}
+                              </Badge>
+                            </span>
+                            <span className="text-slate-600">
+                              <strong>Trips escaneadas:</strong>{' '}
+                              {results.debug.total_trips_scanned ?? 0}
+                            </span>
+                            <span className="text-slate-600">
+                              <strong>Trips encontradas:</strong> {results.debug.trips_found ?? 0}
+                            </span>
+                            <span className="text-slate-600">
+                              <strong>Páginas processadas:</strong>{' '}
+                              {results.debug.pages_processed ?? results.debug.pages_traversed ?? 0}
+                            </span>
+                            <span className="text-slate-600">
+                              <strong>Fonte:</strong> {results.debug.data_source ?? 'api'}
+                            </span>
+                            <span className="text-slate-600">
+                              <strong>Tempo:</strong>{' '}
+                              {results.debug.processing_time_seconds != null
+                                ? `${results.debug.processing_time_seconds.toFixed(1)}s`
+                                : '-'}
                             </span>
                           </div>
                         </div>
+                        {results.debug.filter_tests && results.debug.filter_tests.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                              <Filter className="w-4 h-4" />
+                              Testes de Filtro de Variação
+                            </h4>
+                            <div className="space-y-2">
+                              {results.debug.filter_tests.map((test, idx) => (
+                                <div
+                                  key={idx}
+                                  className={cn(
+                                    'bg-slate-50 rounded-lg p-3 border',
+                                    test.worked ? 'border-green-200' : 'border-slate-100',
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                    {test.worked ? (
+                                      <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                                    ) : (
+                                      <XCircle className="w-4 h-4 text-slate-400 shrink-0" />
+                                    )}
+                                    <span
+                                      className={cn(
+                                        'text-xs font-bold px-2 py-0.5 rounded',
+                                        test.statusCode === 200
+                                          ? 'bg-green-100 text-green-700'
+                                          : 'bg-red-100 text-red-700',
+                                      )}
+                                    >
+                                      {test.statusCode}
+                                    </span>
+                                    <code className="text-xs text-slate-600 font-semibold">
+                                      {test.name}
+                                    </code>
+                                    {test.worked && (
+                                      <Badge className="text-xs bg-green-500 hover:bg-green-500">
+                                        Funcionou
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-3 text-xs text-slate-500 ml-6">
+                                    <span>Trips retornadas: {test.tripsReturned}</span>
+                                    <span>Trips correspondentes: {test.matchedTrips}</span>
+                                  </div>
+                                  <code className="text-xs text-slate-400 block ml-6 mt-1 break-all">
+                                    {test.url}
+                                  </code>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         {results.debug.calls && results.debug.calls.length > 0 && (
                           <div>
                             <h4 className="text-sm font-semibold text-slate-700 mb-2">
