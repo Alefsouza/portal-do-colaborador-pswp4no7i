@@ -83,7 +83,12 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     } catch (_) {}
 
     var syncStatusVal = syncStatusRecords.length > 0 ? syncStatusRecords[0].getString('status') : ''
-    if (syncStatusVal === 'em_andamento' || syncStatusVal === 'in_progress') {
+    if (
+      syncStatusVal === 'em_andamento' ||
+      syncStatusVal === 'in_progress' ||
+      syncStatusVal === 'trips_downloaded' ||
+      syncStatusVal === 'processing_events'
+    ) {
       return e.json(200, {
         sincronizado: false,
         mensagem:

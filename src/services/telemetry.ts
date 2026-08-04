@@ -87,7 +87,15 @@ export interface SyncStatus {
   date: string
   total_pages: number
   pages_processed: number[]
-  status: 'in_progress' | 'completed' | 'failed'
+  status: 'in_progress' | 'completed' | 'failed' | 'trips_downloaded' | 'processing_events'
+}
+
+export interface SyncEventsResponse {
+  sucesso: boolean
+  trips_processadas: number
+  eventos_processados: number
+  trips_restantes: number
+  completo: boolean
 }
 
 export class NeedsSyncError extends Error {
@@ -140,6 +148,14 @@ export async function syncChunk(
     body: { date, start_page: startPage, chunk_size: chunkSize },
   })
   return res as SyncChunkResponse
+}
+
+export async function syncEvents(date: string): Promise<SyncEventsResponse> {
+  const res = await pb.send('/backend/v1/datalbus/sync-events', {
+    method: 'POST',
+    body: { date },
+  })
+  return res as SyncEventsResponse
 }
 
 export async function getSyncStatus(date: string): Promise<SyncStatus | null> {

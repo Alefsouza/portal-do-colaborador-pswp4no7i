@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
-import { syncInit, syncChunk, getSyncStatus } from '@/services/telemetry'
+import { syncInit, syncChunk, syncEvents, getSyncStatus } from '@/services/telemetry'
 
 interface SyncModalProps {
   open: boolean
@@ -20,6 +20,7 @@ interface SyncModalProps {
 
 const CHUNK_TIMEOUT_MS = 70000
 const MAX_RETRIES = 3
+const MAX_EVENTS_RETRIES = 5
 
 function formatDateBr(dateStr: string): string {
   const [y, m, d] = dateStr.split('-')
@@ -33,11 +34,16 @@ function findNextPage(processed: number[], total: number): number {
   return total + 1
 }
 
+type SyncPhase = 'downloading_trips' | 'processing_events'
+
 export function SyncModal({ open, date, onClose, onSyncComplete }: SyncModalProps) {
   const [progress, setProgress] = useState(0)
   const [currentPage, setCurrentPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [phase, setPhase] = useState<'syncing' | 'completed' | 'error'>('syncing')
+  const [syncPhase, setSyncPhase] = useState<SyncPhase>('downloading_trips')
+  const [eventsProcessed, setEventsProcessed] = useState(0)
+  const [tripsRemaining, setTripsRemaining] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [errorPage, setErrorPage] = useState(0)
   const cancelRef = useRef(false)
@@ -51,11 +57,15 @@ export function SyncModal({ open, date, onClose, onSyncComplete }: SyncModalProp
     setProgress(0)
     setErrorMessage('')
     setErrorPage(0)
+    setEventsProcessed(0)
+    setTripsRemaining(0)
+    setSyncPhase('downloading_trips')
 
     try {
       const existing = await getSyncStatus(date)
       let startPage = 2
       let total = 0
+      let skipTrips = false
 
       if (existing && existing.status === 'completed') {
         setPhase('completed')
@@ -64,59 +74,118 @@ export function SyncModal({ open, date, onClose, onSyncComplete }: SyncModalProp
         return
       }
 
-      if (existing && (existing.status === 'in_progress' || existing.status === 'failed')) {
+      if (
+        existing &&
+        (existing.status === 'trips_downloaded' || existing.status === 'processing_events')
+      ) {
+        skipTrips = true
+        total = existing.total_pages
+        setTotalPages(total)
+        setSyncPhase('processing_events')
+        setProgress(50)
+      } else if (existing && (existing.status === 'in_progress' || existing.status === 'failed')) {
         total = existing.total_pages
         const processed = existing.pages_processed || []
         startPage = findNextPage(processed, total)
         setTotalPages(total)
         setCurrentPage(processed.length)
-        setProgress(total > 0 ? Math.round((processed.length / total) * 100) : 0)
+        setProgress(total > 0 ? Math.round((processed.length / total) * 50) : 0)
       } else {
         const initResult = await syncInit(date)
         total = initResult.total_pages
         startPage = 2
         setTotalPages(total)
         setCurrentPage(1)
-        setProgress(total > 0 ? Math.round((1 / total) * 100) : 100)
+        setProgress(total > 0 ? Math.round((1 / total) * 50) : 50)
       }
 
-      if (startPage > total) {
-        setPhase('completed')
-        setProgress(100)
-        setTimeout(() => onSyncComplete(), 800)
-        return
+      if (!skipTrips && startPage <= total) {
+        let nextPage = startPage
+        while (nextPage <= total && !cancelRef.current) {
+          let chunkResult = null
+          try {
+            chunkResult = await Promise.race([
+              syncChunk(date, nextPage, 3),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('timeout')), CHUNK_TIMEOUT_MS),
+              ),
+            ])
+            retryCountRef.current = 0
+          } catch {
+            retryCountRef.current++
+            if (retryCountRef.current >= MAX_RETRIES) {
+              setPhase('error')
+              setErrorPage(nextPage)
+              setErrorMessage(
+                `Não foi possível sincronizar a página ${nextPage}. Clique em Tentar Novamente.`,
+              )
+              return
+            }
+            await new Promise((r) => setTimeout(r, 1500))
+            continue
+          }
+
+          if (!chunkResult) continue
+          setCurrentPage(chunkResult.next_page - 1)
+          setProgress(Math.round(((chunkResult.next_page - 1) / total) * 50))
+          nextPage = chunkResult.next_page
+          if (!chunkResult.has_more) break
+        }
+
+        if (cancelRef.current) {
+          onClose()
+          return
+        }
       }
 
-      let nextPage = startPage
-      while (nextPage <= total && !cancelRef.current) {
-        let chunkResult = null
+      setSyncPhase('processing_events')
+      setProgress(55)
+
+      let eventsComplete = false
+      let eventsRetries = 0
+      let initialRemaining: number | null = null
+
+      while (!eventsComplete && !cancelRef.current) {
+        let eventsResult = null
         try {
-          chunkResult = await Promise.race([
-            syncChunk(date, nextPage, 3),
+          eventsResult = await Promise.race([
+            syncEvents(date),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error('timeout')), CHUNK_TIMEOUT_MS),
             ),
           ])
-          retryCountRef.current = 0
+          eventsRetries = 0
         } catch {
-          retryCountRef.current++
-          if (retryCountRef.current >= MAX_RETRIES) {
+          eventsRetries++
+          if (eventsRetries >= MAX_EVENTS_RETRIES) {
             setPhase('error')
-            setErrorPage(nextPage)
-            setErrorMessage(
-              `Não foi possível sincronizar a página ${nextPage}. Clique em Tentar Novamente.`,
-            )
+            setErrorMessage('Não foi possível processar os eventos. Tente novamente.')
             return
           }
-          await new Promise((r) => setTimeout(r, 1500))
+          await new Promise((r) => setTimeout(r, 2000))
           continue
         }
 
-        if (!chunkResult) continue
-        setCurrentPage(chunkResult.next_page - 1)
-        setProgress(Math.round(((chunkResult.next_page - 1) / total) * 100))
-        nextPage = chunkResult.next_page
-        if (!chunkResult.has_more) break
+        if (!eventsResult) continue
+
+        setEventsProcessed((prev) => prev + eventsResult.eventos_processados)
+        setTripsRemaining(eventsResult.trips_restantes)
+
+        if (initialRemaining === null && eventsResult.trips_restantes > 0) {
+          initialRemaining = eventsResult.trips_restantes
+        }
+
+        if (eventsResult.completo) {
+          eventsComplete = true
+        } else {
+          if (initialRemaining && initialRemaining > 0) {
+            const doneRatio = 1 - eventsResult.trips_restantes / initialRemaining
+            setProgress(55 + Math.round(doneRatio * 40))
+          } else {
+            setProgress(70)
+          }
+          await new Promise((r) => setTimeout(r, 1000))
+        }
       }
 
       if (cancelRef.current) {
@@ -157,7 +226,7 @@ export function SyncModal({ open, date, onClose, onSyncComplete }: SyncModalProp
             Preparando seus dados
           </DialogTitle>
           <DialogDescription className="text-slate-500">
-            Estamos sincronizando as viagens do dia {formatDateBr(date)}. Isso pode levar alguns
+            Estamos sincronizando os dados do dia {formatDateBr(date)}. Isso pode levar alguns
             minutos na primeira consulta.
           </DialogDescription>
         </DialogHeader>
@@ -167,13 +236,19 @@ export function SyncModal({ open, date, onClose, onSyncComplete }: SyncModalProp
             <Progress value={progress} className="h-3 w-full [&>div]:bg-green-500" />
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-600 font-medium">
-                Processando página {currentPage} de {totalPages}...
+                {syncPhase === 'downloading_trips'
+                  ? `Processando página ${currentPage} de ${totalPages}...`
+                  : `Processando eventos...${tripsRemaining > 0 ? ` (${tripsRemaining} restantes)` : ''}`}
               </span>
               <span className="text-green-600 font-bold">{progress}%</span>
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <Loader2 className="w-4 h-4 animate-spin text-green-600" />
-              <span>Sincronizando viagens...</span>
+              <span>
+                {syncPhase === 'downloading_trips'
+                  ? 'Baixando viagens...'
+                  : `${eventsProcessed} eventos processados...`}
+              </span>
             </div>
             <Button variant="outline" onClick={handleCancel} className="w-full">
               <X className="w-4 h-4 mr-2" />

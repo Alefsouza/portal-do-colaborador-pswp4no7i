@@ -217,7 +217,7 @@ routerAdd('POST', '/backend/v1/datalbus/sync-chunk', (e) => {
       var rec = statusRecords2[0]
       var allDone = pagesProcessed.length >= totalPages
       rec.set('pages_processed', JSON.stringify(pagesProcessed))
-      rec.set('status', allDone ? 'completed' : 'in_progress')
+      rec.set('status', allDone ? 'trips_downloaded' : 'in_progress')
       rec.set('updated_at', new Date().toISOString())
       $app.save(rec)
     }
