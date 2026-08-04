@@ -24,6 +24,8 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     return e.json(400, { error: 'Data inválida. Use o formato YYYY-MM-DD.' })
   }
 
+  $app.logger().info('datalbus_telemetria consultation', 'workerId', workerId, 'data', data)
+
   var today = new Date()
   today.setHours(0, 0, 0, 0)
   var minDate = new Date()
@@ -33,6 +35,23 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
 
   if (reqDate > today || reqDate < minDate) {
     return e.json(400, { erro: 'Consulta disponivel apenas para os ultimos 30 dias.' })
+  }
+
+  function normalizeDate(raw) {
+    if (!raw) return ''
+    var s = String(raw).trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.substring(0, 10)
+    var brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+    if (brMatch) return brMatch[3] + '-' + brMatch[2] + '-' + brMatch[1]
+    var d = new Date(s)
+    if (!isNaN(d.getTime())) {
+      var y = d.getFullYear()
+      var m = String(d.getMonth() + 1).padStart(2, '0')
+      var day = String(d.getDate()).padStart(2, '0')
+      return y + '-' + m + '-' + day
+    }
+    return s
   }
 
   var syncRecords = []
@@ -47,49 +66,74 @@ routerAdd('POST', '/backend/v1/datalbus/telemetria', (e) => {
     )
   } catch (_) {}
 
-  if (syncRecords.length === 0 || syncRecords[0].getString('status') !== 'sucesso') {
-    return e.json(200, {
-      sincronizado: false,
-      mensagem:
-        'Os dados desta data ainda nao foram sincronizados. Tente novamente em alguns minutos.',
-    })
+  var syncLogStatus = syncRecords.length > 0 ? syncRecords[0].getString('status') : ''
+  var isSyncLogFinal = syncLogStatus === 'sucesso' || syncLogStatus === 'completed'
+
+  if (!isSyncLogFinal) {
+    var syncStatusRecords = []
+    try {
+      syncStatusRecords = $app.findRecordsByFilter(
+        'datalbus_sync_status',
+        'date = {:d}',
+        '-updated',
+        1,
+        0,
+        { d: data },
+      )
+    } catch (_) {}
+
+    var syncStatusVal = syncStatusRecords.length > 0 ? syncStatusRecords[0].getString('status') : ''
+    if (syncStatusVal === 'em_andamento' || syncStatusVal === 'in_progress') {
+      return e.json(200, {
+        sincronizado: false,
+        mensagem:
+          'Os dados desta data ainda nao foram sincronizados. Tente novamente em alguns minutos.',
+      })
+    }
   }
 
   var trips = []
   try {
-    trips = $app.findRecordsByFilter(
-      'telemetria_trips',
-      'worker_id = {:w} && data = {:d}',
-      '',
-      1000,
-      0,
-      { w: workerId, d: data },
-    )
+    trips = $app.findRecordsByFilter('telemetria_trips', 'worker_id = {:w}', '', 1000, 0, {
+      w: workerId,
+    })
   } catch (_) {}
+
+  trips = trips.filter(function (rec) {
+    return normalizeDate(rec.getString('data')) === data
+  })
 
   var drivingEventRecords = []
   try {
     drivingEventRecords = $app.findRecordsByFilter(
       'telemetria_eventos',
-      'worker_id = {:w} && data = {:d} && classificacao = {:c}',
+      'worker_id = {:w} && classificacao = {:c}',
       '-data_hora',
       1000,
       0,
-      { w: workerId, d: data, c: 'direcao' },
+      { w: workerId, c: 'direcao' },
     )
   } catch (_) {}
+
+  drivingEventRecords = drivingEventRecords.filter(function (rec) {
+    return normalizeDate(rec.getString('data')) === data
+  })
 
   var technicalEventRecords = []
   try {
     technicalEventRecords = $app.findRecordsByFilter(
       'telemetria_eventos',
-      'worker_id = {:w} && data = {:d} && classificacao = {:c}',
+      'worker_id = {:w} && classificacao = {:c}',
       '-data_hora',
       1000,
       0,
-      { w: workerId, d: data, c: 'tecnico' },
+      { w: workerId, c: 'tecnico' },
     )
   } catch (_) {}
+
+  technicalEventRecords = technicalEventRecords.filter(function (rec) {
+    return normalizeDate(rec.getString('data')) === data
+  })
 
   function buildEvent(rec) {
     return {
