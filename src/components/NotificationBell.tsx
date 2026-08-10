@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Bell, Megaphone, FileText, Loader2, AlertCircle, RefreshCw, Download } from 'lucide-react'
+import { Bell, Megaphone, FileText, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -9,7 +9,12 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
-import { listInformativos, getAnexoUrl, type Informativo } from '@/services/admin-informativos'
+import {
+  listInformativos,
+  getAnexoUrl,
+  isImageFile,
+  type Informativo,
+} from '@/services/admin-informativos'
 import { getVisualizados, markAsViewed } from '@/services/informativos-visualizados'
 import { getAllPopups, type PopupEnvio } from '@/services/popup-envios'
 import { cn } from '@/lib/utils'
@@ -206,8 +211,8 @@ export function NotificationBell() {
           if (!o) setDetail(null)
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                 <Megaphone className="w-5 h-5 text-primary" />
@@ -220,17 +225,32 @@ export function NotificationBell() {
               {infoDetail?.conteudo ?? popupDetail?.conteudo}
             </p>
           </DialogHeader>
-          {infoDetail?.anexo && (
-            <a
-              href={getAnexoUrl(infoDetail)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary text-sm font-medium mt-2 hover:underline"
-            >
-              <Download className="w-4 h-4" />
-              Baixar anexo
-            </a>
-          )}
+          {infoDetail?.anexo &&
+            (() => {
+              const anexoUrl = getAnexoUrl(infoDetail)
+              if (isImageFile(infoDetail.anexo)) {
+                return (
+                  <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center">
+                    <img
+                      src={anexoUrl}
+                      alt={infoDetail.titulo}
+                      className="max-w-full max-h-[60vh] object-contain"
+                    />
+                  </div>
+                )
+              }
+              return (
+                <div className="flex-1 min-h-0 rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
+                  <object data={anexoUrl} type="application/pdf" className="w-full h-[60vh]">
+                    <iframe
+                      src={anexoUrl}
+                      className="w-full h-[60vh] border-0"
+                      title={infoDetail.titulo}
+                    />
+                  </object>
+                </div>
+              )
+            })()}
         </DialogContent>
       </Dialog>
     </>
