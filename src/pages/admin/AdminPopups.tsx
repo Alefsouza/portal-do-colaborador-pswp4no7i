@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, type FormEvent } from 'react'
 import { Loader2, Plus, Send, Megaphone } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -10,13 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Table,
   TableBody,
@@ -26,8 +20,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useRealtime } from '@/hooks/use-realtime'
-import { listPopups, createPopup, type PopupEnvioAdmin } from '@/services/admin-popups'
+import { listPopups, sendPopup, groupPopups, type PopupEnvioAdmin } from '@/services/admin-popups'
 import { listUsuariosForSelect, type UsuarioSelect } from '@/services/admin-usuarios'
+import { UserMultiSelect } from '@/components/admin/UserMultiSelect'
+import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
 
 export default function AdminPopups() {
   const [items, setItems] = useState<PopupEnvioAdmin[]>([])
@@ -36,8 +32,12 @@ export default function AdminPopups() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [titulo, setTitulo] = useState('')
   const [conteudo, setConteudo] = useState('')
-  const [userId, setUserId] = useState('')
+  const [recipientType, setRecipientType] = useState<'all' | 'specific'>('all')
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [submitting, setSubmitting] = useState(false)
+
+  const grouped = useMemo(() => groupPopups(items), [items])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -63,21 +63,38 @@ export default function AdminPopups() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!titulo.trim() || !conteudo.trim() || !userId) {
-      toast.error('Preencha todos os campos obrigatórios.')
+    setFieldErrors({})
+    if (!titulo.trim()) {
+      setFieldErrors({ titulo: 'Título é obrigatório.' })
+      return
+    }
+    if (!conteudo.trim()) {
+      setFieldErrors({ conteudo: 'Conteúdo é obrigatório.' })
+      return
+    }
+    if (recipientType === 'specific' && selectedUserIds.length === 0) {
+      setFieldErrors({ userIds: 'Selecione ao menos um colaborador.' })
       return
     }
     setSubmitting(true)
     try {
-      await createPopup({ titulo, conteudo, id_usuario: userId })
+      await sendPopup({
+        titulo,
+        conteudo,
+        recipientType,
+        userIds: recipientType === 'specific' ? selectedUserIds : undefined,
+      })
       toast.success('Pop-up enviado com sucesso!')
       setTitulo('')
       setConteudo('')
-      setUserId('')
+      setRecipientType('all')
+      setSelectedUserIds([])
       setDialogOpen(false)
       loadData()
-    } catch {
-      toast.error('Erro ao criar pop-up.')
+    } catch (err) {
+      const fe = extractFieldErrors(err)
+      if (Object.keys(fe).length > 0) setFieldErrors(fe)
+      else toast.error(getErrorMessage(err))
     } finally {
       setSubmitting(false)
     }
@@ -107,7 +124,7 @@ export default function AdminPopups() {
         </Button>
       </div>
 
-      {items.length === 0 ? (
+      {grouped.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
             <Megaphone className="w-8 h-8 text-primary" />
@@ -122,14 +139,14 @@ export default function AdminPopups() {
                 <TableRow className="bg-primary/5 hover:bg-primary/5">
                   <TableHead className="font-bold text-primary">Título</TableHead>
                   <TableHead className="font-bold text-primary">Conteúdo</TableHead>
-                  <TableHead className="font-bold text-primary">Usuário</TableHead>
+                  <TableHead className="font-bold text-primary">Destinatários</TableHead>
                   <TableHead className="font-bold text-primary">Status</TableHead>
                   <TableHead className="font-bold text-primary">Data</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.id} className="border-slate-100 hover:bg-primary/5">
+                {grouped.map((item) => (
+                  <TableRow key={item.key} className="border-slate-100 hover:bg-primary/5">
                     <TableCell className="font-medium text-slate-900">
                       {item.titulo || '—'}
                     </TableCell>
@@ -137,18 +154,28 @@ export default function AdminPopups() {
                       {item.conteudo || '—'}
                     </TableCell>
                     <TableCell className="text-slate-600">
-                      {item.expand?.id_usuario?.nome_completo || '—'}
+                      {item.totalRecipients > 1 ? (
+                        <span className="font-medium text-primary">Múltiplos usuários</span>
+                      ) : (
+                        item.firstUserName || '—'
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
                         className={
-                          item.status_lido
-                            ? 'bg-green-100 text-green-700 border-green-200'
-                            : 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                          item.totalRecipients > 1
+                            ? 'bg-blue-100 text-blue-700 border-blue-200'
+                            : item.readCount === item.totalRecipients
+                              ? 'bg-green-100 text-green-700 border-green-200'
+                              : 'bg-yellow-100 text-yellow-700 border-yellow-200'
                         }
                       >
-                        {item.status_lido ? 'Lido' : 'Não lido'}
+                        {item.totalRecipients > 1
+                          ? `${item.readCount}/${item.totalRecipients} lidos`
+                          : item.readCount === item.totalRecipients
+                            ? 'Lido'
+                            : 'Não lido'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-slate-600 whitespace-nowrap">
@@ -176,6 +203,7 @@ export default function AdminPopups() {
                 onChange={(e) => setTitulo(e.target.value)}
                 placeholder="Digite o título do pop-up"
               />
+              {fieldErrors.titulo && <p className="text-sm text-red-500">{fieldErrors.titulo}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="popup-conteudo">Conteúdo *</Label>
@@ -186,22 +214,44 @@ export default function AdminPopups() {
                 onChange={(e) => setConteudo(e.target.value)}
                 placeholder="Digite o conteúdo da mensagem"
               />
+              {fieldErrors.conteudo && (
+                <p className="text-sm text-red-500">{fieldErrors.conteudo}</p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label>Usuário *</Label>
-              <Select value={userId} onValueChange={setUserId}>
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Selecione o usuário" />
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.nome_completo}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Destinatários *</Label>
+              <RadioGroup
+                value={recipientType}
+                onValueChange={(v) => setRecipientType(v as 'all' | 'specific')}
+                className="flex flex-col gap-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="all" id="dest-all" />
+                  <Label htmlFor="dest-all" className="cursor-pointer">
+                    Todos os colaboradores
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="specific" id="dest-specific" />
+                  <Label htmlFor="dest-specific" className="cursor-pointer">
+                    Colaboradores específicos
+                  </Label>
+                </div>
+              </RadioGroup>
             </div>
+            {recipientType === 'specific' && (
+              <div className="space-y-2">
+                <Label>Selecionar colaboradores *</Label>
+                <UserMultiSelect
+                  users={users}
+                  selected={selectedUserIds}
+                  onChange={setSelectedUserIds}
+                />
+                {fieldErrors.userIds && (
+                  <p className="text-sm text-red-500">{fieldErrors.userIds}</p>
+                )}
+              </div>
+            )}
             <Button
               type="submit"
               disabled={submitting}

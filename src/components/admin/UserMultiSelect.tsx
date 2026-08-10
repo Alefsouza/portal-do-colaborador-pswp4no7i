@@ -11,8 +11,12 @@ interface Props {
 
 export function UserMultiSelect({ users, selected, onChange }: Props) {
   const [search, setSearch] = useState('')
+  const q = search.toLowerCase()
   const filtered = users.filter(
-    (u) => u.nome_completo.toLowerCase().includes(search.toLowerCase()) || u.cpf.includes(search),
+    (u) =>
+      u.nome_completo.toLowerCase().includes(q) ||
+      u.cpf.includes(search) ||
+      u.registro.includes(search),
   )
   const toggle = (id: string) => {
     onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
@@ -20,7 +24,7 @@ export function UserMultiSelect({ users, selected, onChange }: Props) {
   return (
     <div className="space-y-2">
       <Input
-        placeholder="Buscar por nome ou CPF..."
+        placeholder="Buscar por nome, CPF ou registro..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -31,9 +35,11 @@ export function UserMultiSelect({ users, selected, onChange }: Props) {
             className="flex items-center gap-3 p-2.5 cursor-pointer hover:bg-slate-50"
           >
             <Checkbox checked={selected.includes(u.id)} onCheckedChange={() => toggle(u.id)} />
-            <div>
-              <p className="text-sm font-medium text-slate-900">{u.nome_completo}</p>
-              <p className="text-xs text-slate-500">{u.cpf}</p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-900 truncate">{u.nome_completo}</p>
+              <p className="text-xs text-slate-500">
+                {u.cpf} • Reg: {u.registro}
+              </p>
             </div>
           </label>
         ))}

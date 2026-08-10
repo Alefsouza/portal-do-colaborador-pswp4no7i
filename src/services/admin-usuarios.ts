@@ -7,6 +7,7 @@ export interface UsuarioSelect {
   id: string
   nome_completo: string
   cpf: string
+  registro: string
   departamento: string
 }
 
