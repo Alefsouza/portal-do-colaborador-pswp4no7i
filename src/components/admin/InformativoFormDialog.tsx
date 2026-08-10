@@ -26,7 +26,7 @@ import {
   type Informativo,
 } from '@/services/admin-informativos'
 import { getDistinctDepartamentos } from '@/services/admin-usuarios'
-import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
+import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
 
 interface Props {
   open: boolean
@@ -37,6 +37,8 @@ interface Props {
 
 const ACCEPT_TYPES =
   '.pdf,.jpeg,.jpg,.png,.gif,.webp,application/pdf,image/jpeg,image/png,image/gif,image/webp'
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024
 
 export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved }: Props) {
   const [formData, setFormData] = useState({
@@ -50,6 +52,7 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
   const [submitting, setSubmitting] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [removeExistingFile, setRemoveExistingFile] = useState(false)
+  const [fileError, setFileError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -70,11 +73,32 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
     setSelectedFile(null)
     setRemoveExistingFile(false)
     setFieldErrors({})
+    setFileError(null)
   }, [open, editingItem])
+
+  const validateFile = (file: File): string | null => {
+    if (file.size > MAX_FILE_SIZE) {
+      return 'O arquivo excede o tamanho máximo de 10 MB.'
+    }
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    const allowedExtensions = /\.(pdf|jpe?g|png|gif|webp)$/i
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.test(file.name)) {
+      return 'Tipo de arquivo não permitido. Use PDF, JPEG, PNG, GIF ou WebP.'
+    }
+    return null
+  }
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      const error = validateFile(file)
+      if (error) {
+        setFileError(error)
+        setSelectedFile(null)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        return
+      }
+      setFileError(null)
       setSelectedFile(file)
       setRemoveExistingFile(false)
     }
@@ -82,18 +106,27 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
 
   const clearSelectedFile = () => {
     setSelectedFile(null)
+    setFileError(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const removeExistingAnexo = () => {
     setRemoveExistingFile(true)
     setSelectedFile(null)
+    setFileError(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setFieldErrors({})
+    setFileError(null)
+
+    if (!formData.titulo.trim()) {
+      setFieldErrors({ titulo: 'O título é obrigatório.' })
+      return
+    }
+
     setSubmitting(true)
     try {
       const data = {
@@ -114,8 +147,15 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
       onOpenChange(false)
       onSaved()
     } catch (err) {
-      setFieldErrors(extractFieldErrors(err))
-      toast.error('Erro ao salvar informativo.')
+      const errors = extractFieldErrors(err)
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors)
+      }
+      if (errors.anexo) {
+        setFileError(errors.anexo)
+      }
+      const errorMsg = getErrorMessage(err)
+      toast.error(errorMsg || 'Erro ao salvar informativo.')
     } finally {
       setSubmitting(false)
     }
@@ -189,6 +229,7 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
                 Selecionar arquivo
               </Button>
             )}
+            {fileError && <p className="text-sm text-red-500">{fileError}</p>}
             <p className="text-xs text-slate-400">PDF, JPEG, PNG, GIF ou WebP. Máximo 10 MB.</p>
           </div>
           <div className="space-y-2">
@@ -209,6 +250,9 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
                 ))}
               </SelectContent>
             </Select>
+            {fieldErrors.departamento && (
+              <p className="text-sm text-red-500">{fieldErrors.departamento}</p>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <Switch

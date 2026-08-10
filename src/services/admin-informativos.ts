@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { ensureAdminTokenInStore } from '@/services/admin-auth'
 
 export interface Informativo {
   id: string
@@ -12,6 +13,7 @@ export interface Informativo {
 }
 
 export async function listInformativos(): Promise<Informativo[]> {
+  ensureAdminTokenInStore()
   return (await pb.collection('informativos').getFullList({
     sort: '-created',
   })) as Informativo[]
@@ -24,6 +26,7 @@ export async function createInformativo(data: {
   status_ativo: boolean
   anexo?: File | null
 }): Promise<Informativo> {
+  ensureAdminTokenInStore()
   const formData = new FormData()
   formData.append('titulo', data.titulo)
   formData.append('conteudo', data.conteudo)
@@ -46,6 +49,7 @@ export async function updateInformativo(
     removeAnexo?: boolean
   },
 ): Promise<Informativo> {
+  ensureAdminTokenInStore()
   const formData = new FormData()
   formData.append('titulo', data.titulo)
   formData.append('conteudo', data.conteudo)
@@ -60,6 +64,7 @@ export async function updateInformativo(
 }
 
 export async function deleteInformativo(id: string): Promise<void> {
+  ensureAdminTokenInStore()
   await pb.collection('informativos').delete(id)
 }
 
