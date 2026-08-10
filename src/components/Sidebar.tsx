@@ -8,6 +8,7 @@ import {
   ClipboardList,
   CalendarClock,
   Wrench,
+  Newspaper,
   LogOut,
   ChevronDown,
 } from 'lucide-react'
@@ -142,6 +143,7 @@ const simpleNav = [
   { label: 'Início', to: '/dashboard', icon: Home },
   { label: 'Telemetria', to: '/telemetria', icon: Gauge },
   { label: 'Recibos', to: '/recibos', icon: Receipt },
+  { label: 'Newsletter', to: '/newsletter', icon: Newspaper },
 ]
 
 const expandableNav = [

@@ -16,6 +16,7 @@ import Recibos from './pages/Recibos'
 import Solicitacoes from './pages/Solicitacoes'
 import Agendamentos from './pages/Agendamentos'
 import Servicos from './pages/Servicos'
+import Newsletter from './pages/Newsletter'
 import Perfil from './pages/Perfil'
 import Configuracoes from './pages/Configuracoes'
 
@@ -62,6 +63,7 @@ const App = () => (
                 <Route path="/solicitacoes" element={<Solicitacoes />} />
                 <Route path="/agendamentos" element={<Agendamentos />} />
                 <Route path="/servicos" element={<Servicos />} />
+                <Route path="/newsletter" element={<Newsletter />} />
                 <Route path="/perfil" element={<Perfil />} />
                 <Route path="/configuracoes" element={<Configuracoes />} />
               </Route>
