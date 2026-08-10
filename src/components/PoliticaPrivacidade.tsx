@@ -33,7 +33,7 @@ export function PoliticaPrivacidade() {
   return (
     <div className="mt-10 animate-fade-in-up">
       <h2 className="text-xl md:text-2xl font-bold text-slate-900 mb-6">Política de Privacidade</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+      <div className="flex flex-col gap-4 md:gap-6">
         {sections.map((section) => (
           <Card
             key={section.title}
