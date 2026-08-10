@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T15:51:43.793Z",
+  "generatedAt": "2026-08-10T16:02:33.527Z",
   "collections": [
     {
       "name": "users",
@@ -182,6 +182,18 @@
         {
           "name": "anexo",
           "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_inicio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_final",
+          "type": "date",
           "required": false,
           "system": false
         }

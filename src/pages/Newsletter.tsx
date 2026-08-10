@@ -18,7 +18,25 @@ export default function Newsletter() {
     try {
       setError(false)
       const data = await listInformativos()
-      setItems(data.filter((n) => n.status_ativo))
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      setItems(
+        data.filter((n) => {
+          if (!n.status_ativo) return false
+          if (!n.data_inicio && !n.data_final) return true
+          if (n.data_inicio) {
+            const inicio = parseISO(n.data_inicio)
+            inicio.setHours(0, 0, 0, 0)
+            if (inicio > today) return false
+          }
+          if (n.data_final) {
+            const final = parseISO(n.data_final)
+            final.setHours(0, 0, 0, 0)
+            if (final < today) return false
+          }
+          return true
+        }),
+      )
     } catch {
       setError(true)
     } finally {

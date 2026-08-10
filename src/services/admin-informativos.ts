@@ -8,6 +8,8 @@ export interface Informativo {
   departamento: string
   status_ativo: boolean
   anexo: string
+  data_inicio: string
+  data_final: string
   created: string
   updated: string
 }
@@ -25,6 +27,8 @@ export async function createInformativo(data: {
   departamento: string
   status_ativo: boolean
   anexo?: File | null
+  data_inicio?: string
+  data_final?: string
 }): Promise<Informativo> {
   ensureAdminTokenInStore()
   const formData = new FormData()
@@ -32,6 +36,8 @@ export async function createInformativo(data: {
   formData.append('conteudo', data.conteudo)
   formData.append('departamento', data.departamento)
   formData.append('status_ativo', String(data.status_ativo))
+  formData.append('data_inicio', data.data_inicio || '')
+  formData.append('data_final', data.data_final || '')
   if (data.anexo) {
     formData.append('anexo', data.anexo)
   }
@@ -47,6 +53,8 @@ export async function updateInformativo(
     status_ativo: boolean
     anexo?: File | null
     removeAnexo?: boolean
+    data_inicio?: string
+    data_final?: string
   },
 ): Promise<Informativo> {
   ensureAdminTokenInStore()
@@ -55,6 +63,8 @@ export async function updateInformativo(
   formData.append('conteudo', data.conteudo)
   formData.append('departamento', data.departamento)
   formData.append('status_ativo', String(data.status_ativo))
+  formData.append('data_inicio', data.data_inicio || '')
+  formData.append('data_final', data.data_final || '')
   if (data.anexo) {
     formData.append('anexo', data.anexo)
   } else if (data.removeAnexo) {

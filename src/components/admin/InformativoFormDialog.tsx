@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from 'react'
 import { Loader2, FileText, X, Upload } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -20,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { DatePicker } from '@/components/date-picker'
 import {
   createInformativo,
   updateInformativo,
@@ -47,6 +50,8 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
     departamento: 'none',
     status_ativo: true,
   })
+  const [dataInicio, setDataInicio] = useState<Date | undefined>(undefined)
+  const [dataFinal, setDataFinal] = useState<Date | undefined>(undefined)
   const [departments, setDepartments] = useState<string[]>([])
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [submitting, setSubmitting] = useState(false)
@@ -67,8 +72,12 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
         departamento: editingItem.departamento || 'none',
         status_ativo: editingItem.status_ativo,
       })
+      setDataInicio(editingItem.data_inicio ? parseISO(editingItem.data_inicio) : undefined)
+      setDataFinal(editingItem.data_final ? parseISO(editingItem.data_final) : undefined)
     } else {
       setFormData({ titulo: '', conteudo: '', departamento: 'none', status_ativo: true })
+      setDataInicio(undefined)
+      setDataFinal(undefined)
     }
     setSelectedFile(null)
     setRemoveExistingFile(false)
@@ -136,6 +145,8 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
         status_ativo: formData.status_ativo,
         anexo: selectedFile,
         removeAnexo: removeExistingFile && !selectedFile,
+        data_inicio: dataInicio ? format(dataInicio, 'yyyy-MM-dd') : '',
+        data_final: dataFinal ? format(dataFinal, 'yyyy-MM-dd') : '',
       }
       if (editingItem) {
         await updateInformativo(editingItem.id, data)
@@ -190,6 +201,22 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
               placeholder="Digite o conteúdo (opcional se houver anexo)"
             />
             {fieldErrors.conteudo && <p className="text-sm text-red-500">{fieldErrors.conteudo}</p>}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Data de Início</Label>
+              <DatePicker value={dataInicio} onChange={setDataInicio} placeholder="Opcional" />
+              {fieldErrors.data_inicio && (
+                <p className="text-sm text-red-500">{fieldErrors.data_inicio}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Data Final</Label>
+              <DatePicker value={dataFinal} onChange={setDataFinal} placeholder="Opcional" />
+              {fieldErrors.data_final && (
+                <p className="text-sm text-red-500">{fieldErrors.data_final}</p>
+              )}
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Anexo</Label>

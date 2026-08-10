@@ -8,6 +8,7 @@ import {
   Trash2,
   Download,
   FileText,
+  CalendarDays,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -143,6 +144,7 @@ export default function AdminInformativos() {
                   <TableHead className="font-bold text-primary">Conteúdo</TableHead>
                   <TableHead className="font-bold text-primary">Departamento</TableHead>
                   <TableHead className="font-bold text-primary">Status</TableHead>
+                  <TableHead className="font-bold text-primary">Período</TableHead>
                   <TableHead className="font-bold text-primary">Data</TableHead>
                   <TableHead className="font-bold text-primary">Anexo</TableHead>
                   {canManage && <TableHead className="font-bold text-primary">Ações</TableHead>}
@@ -167,6 +169,22 @@ export default function AdminInformativos() {
                       >
                         {item.status_ativo ? 'Ativo' : 'Inativo'}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-600 whitespace-nowrap">
+                      <div className="flex items-center gap-1 text-xs">
+                        <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                        <span>
+                          {item.data_inicio
+                            ? format(parseISO(item.data_inicio), 'dd/MM/yyyy', { locale: ptBR })
+                            : '—'}
+                        </span>
+                        <span className="text-slate-300">→</span>
+                        <span>
+                          {item.data_final
+                            ? format(parseISO(item.data_final), 'dd/MM/yyyy', { locale: ptBR })
+                            : '—'}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell className="text-slate-600 whitespace-nowrap">
                       {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
@@ -237,6 +255,20 @@ export default function AdminInformativos() {
                 {item.departamento || 'Todos'} •{' '}
                 {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
               </p>
+              <div className="flex items-center gap-1 text-xs text-slate-500">
+                <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                <span>
+                  {item.data_inicio
+                    ? format(parseISO(item.data_inicio), 'dd/MM/yyyy', { locale: ptBR })
+                    : 'Sem início'}
+                </span>
+                <span className="text-slate-300">→</span>
+                <span>
+                  {item.data_final
+                    ? format(parseISO(item.data_final), 'dd/MM/yyyy', { locale: ptBR })
+                    : 'Sem fim'}
+                </span>
+              </div>
               {item.anexo && (
                 <a
                   href={getAnexoUrl(item)}
