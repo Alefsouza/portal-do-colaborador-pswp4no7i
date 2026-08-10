@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, ClipboardList } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Loader2,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  MessageSquare,
+} from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +39,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function SolicitacoesList({ userId }: { userId: string }) {
+  const navigate = useNavigate()
   const [items, setItems] = useState<Solicitacao[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -105,11 +114,16 @@ export function SolicitacoesList({ userId }: { userId: string }) {
                 <TableHead className="font-bold text-primary">Departamento</TableHead>
                 <TableHead className="font-bold text-primary">Status</TableHead>
                 <TableHead className="font-bold text-primary">Data de Criação</TableHead>
+                <TableHead className="font-bold text-primary w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item) => (
-                <TableRow key={item.id} className="border-slate-100 hover:bg-primary/5">
+                <TableRow
+                  key={item.id}
+                  className="border-slate-100 hover:bg-primary/5 cursor-pointer"
+                  onClick={() => navigate(`/solicitacoes/${item.id}`)}
+                >
                   <TableCell className="font-medium text-slate-900">{item.titulo}</TableCell>
                   <TableCell className="text-slate-600">{item.departamento}</TableCell>
                   <TableCell>
@@ -117,6 +131,9 @@ export function SolicitacoesList({ userId }: { userId: string }) {
                   </TableCell>
                   <TableCell className="text-slate-600 whitespace-nowrap">
                     {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
+                  </TableCell>
+                  <TableCell className="text-slate-400">
+                    <MessageSquare className="w-4 h-4" />
                   </TableCell>
                 </TableRow>
               ))}
@@ -127,7 +144,11 @@ export function SolicitacoesList({ userId }: { userId: string }) {
 
       <div className="md:hidden space-y-3">
         {items.map((item) => (
-          <Card key={item.id} className="border-slate-200">
+          <Card
+            key={item.id}
+            className="border-slate-200 cursor-pointer hover:border-primary/30 transition-colors"
+            onClick={() => navigate(`/solicitacoes/${item.id}`)}
+          >
             <CardContent className="p-4 space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-medium text-slate-900">{item.titulo}</h3>
@@ -137,6 +158,10 @@ export function SolicitacoesList({ userId }: { userId: string }) {
               <p className="text-xs text-slate-400">
                 {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
               </p>
+              <div className="flex items-center gap-1 text-primary text-xs font-medium">
+                <MessageSquare className="w-3.5 h-3.5" />
+                Abrir conversa
+              </div>
             </CardContent>
           </Card>
         ))}
