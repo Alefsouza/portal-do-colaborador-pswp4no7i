@@ -29,6 +29,8 @@ import AdminInformativos from './pages/admin/AdminInformativos'
 import AdminPopups from './pages/admin/AdminPopups'
 import AdminUsuarios from './pages/admin/AdminUsuarios'
 import AdminTelemetriaSync from './pages/admin/AdminTelemetriaSync'
+import AdminSolicitacaoChat from './pages/admin/AdminSolicitacaoChat'
+import SolicitacaoChat from './pages/SolicitacaoChat'
 
 function ProtectedRoute() {
   const { isAuthenticated, needsPasswordChange } = useAuth()
@@ -61,6 +63,7 @@ const App = () => (
                 <Route path="/telemetria" element={<Telemetria />} />
                 <Route path="/recibos" element={<Recibos />} />
                 <Route path="/solicitacoes" element={<Solicitacoes />} />
+                <Route path="/solicitacoes/:id" element={<SolicitacaoChat />} />
                 <Route path="/agendamentos" element={<Agendamentos />} />
                 <Route path="/servicos" element={<Servicos />} />
                 <Route path="/newsletter" element={<Newsletter />} />
@@ -73,6 +76,7 @@ const App = () => (
               <Route element={<AdminLayout />}>
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
                 <Route path="/admin/solicitacoes" element={<AdminSolicitacoes />} />
+                <Route path="/admin/solicitacoes/:id" element={<AdminSolicitacaoChat />} />
                 <Route path="/admin/agendamentos" element={<AdminAgendamentos />} />
                 <Route path="/admin/informativos" element={<AdminInformativos />} />
                 <Route path="/admin/popups" element={<AdminPopups />} />

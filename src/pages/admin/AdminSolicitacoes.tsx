@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, AlertCircle, ClipboardList } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Loader2, AlertCircle, ClipboardList, MessageSquare } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
@@ -55,11 +57,11 @@ export default function AdminSolicitacoes() {
     setLoading(true)
     try {
       setError(false)
-      const items =
+      const data =
         user.perfil === 'TI'
           ? await listAllAdminSolicitacoes()
           : await listAdminSolicitacoes(user.departamento)
-      setItems(items)
+      setItems(data)
     } catch {
       setError(true)
     } finally {
@@ -131,7 +133,9 @@ export default function AdminSolicitacoes() {
                 <TableHead className="font-bold text-primary">Título</TableHead>
                 <TableHead className="font-bold text-primary">Descrição</TableHead>
                 <TableHead className="font-bold text-primary">Status</TableHead>
+                <TableHead className="font-bold text-primary">Proprietário</TableHead>
                 <TableHead className="font-bold text-primary">Data</TableHead>
+                <TableHead className="font-bold text-primary">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -159,8 +163,18 @@ export default function AdminSolicitacoes() {
                       </SelectContent>
                     </Select>
                   </TableCell>
+                  <TableCell className="text-slate-700">
+                    {item.expand?.id_proprietario?.nome_completo || '—'}
+                  </TableCell>
                   <TableCell className="text-slate-600 whitespace-nowrap">
                     {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
+                  </TableCell>
+                  <TableCell>
+                    <Button asChild variant="ghost" size="sm" className="h-8 gap-1">
+                      <Link to={`/admin/solicitacoes/${item.id}`}>
+                        <MessageSquare className="w-4 h-4" /> Ver
+                      </Link>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -180,18 +194,28 @@ export default function AdminSolicitacoes() {
                 {item.expand?.id_usuario?.nome_completo || '—'}
               </p>
               <p className="text-sm text-slate-400">
+                Proprietário: {item.expand?.id_proprietario?.nome_completo || '—'}
+              </p>
+              <p className="text-sm text-slate-400">
                 {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
               </p>
-              <Select value={item.status} onValueChange={(v) => handleStatusChange(item.id, v)}>
-                <SelectTrigger className="w-full h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Solicitada">Solicitada</SelectItem>
-                  <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                  <SelectItem value="Finalizada">Finalizada</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={item.status} onValueChange={(v) => handleStatusChange(item.id, v)}>
+                  <SelectTrigger className="w-full h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Solicitada">Solicitada</SelectItem>
+                    <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                    <SelectItem value="Finalizada">Finalizada</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button asChild variant="outline" size="sm" className="shrink-0">
+                  <Link to={`/admin/solicitacoes/${item.id}`}>
+                    <MessageSquare className="w-4 h-4" />
+                  </Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}

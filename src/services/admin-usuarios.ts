@@ -98,6 +98,23 @@ export async function updateUsuarioAdmin(
   return (await pb.collection('usuarios').update(id, data)) as UsuarioAdmin
 }
 
+export async function listAdminsForTransfer(
+  departamento: string,
+  perfil: string,
+  excludeId: string,
+): Promise<UsuarioAdmin[]> {
+  const adminProfiles = ['Administrador', 'RH', 'TI', 'Financeiro', 'Gerente']
+  const perfilFilter = adminProfiles.map((p) => `perfil = "${p}"`).join(' || ')
+  const filter =
+    perfil === 'TI'
+      ? `(${perfilFilter}) && id != "${excludeId}"`
+      : `(${perfilFilter}) && departamento = "${departamento}" && id != "${excludeId}"`
+  return (await pb.collection('usuarios').getFullList({
+    filter,
+    sort: 'nome_completo',
+  })) as UsuarioAdmin[]
+}
+
 export async function resetUsuarioSenha(id: string): Promise<void> {
   const res = await fetch(`${PB_URL}/backend/v1/usuarios/${id}/reset-senha`, {
     method: 'POST',
