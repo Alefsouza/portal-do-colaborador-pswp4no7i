@@ -10,6 +10,7 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { PoliticaPrivacidade } from '@/components/PoliticaPrivacidade'
 
 const cards = [
   {
@@ -80,6 +81,8 @@ export default function Dashboard() {
           </Link>
         ))}
       </div>
+
+      <PoliticaPrivacidade />
     </div>
   )
 }
