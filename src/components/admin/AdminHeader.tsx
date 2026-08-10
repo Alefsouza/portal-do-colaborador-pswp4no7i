@@ -50,7 +50,7 @@ export function AdminHeader({ onMenuClick }: { onMenuClick?: () => void }) {
           </div>
           <span className="font-bold text-slate-900">Via Sudeste</span>
         </div>
-        <p className="hidden md:block text-sm text-slate-500">Área Administrativa</p>
+        <p className="hidden md:block text-sm text-primary font-bold">Área Administrativa</p>
       </div>
 
       <div className="flex items-center gap-3">

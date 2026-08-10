@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, AlertCircle, ClipboardList } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Loader2, AlertCircle, ClipboardList, MessageSquare, UserCheck } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -27,6 +29,7 @@ import {
   listAdminSolicitacoes,
   listAllAdminSolicitacoes,
   updateSolicitacaoStatus,
+  assumirSolicitacao,
   type AdminSolicitacao,
 } from '@/services/admin-solicitacoes'
 
@@ -45,6 +48,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function AdminSolicitacoes() {
   const { user } = useAdminAuth()
+  const navigate = useNavigate()
   const [items, setItems] = useState<AdminSolicitacao[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -75,12 +79,60 @@ export default function AdminSolicitacoes() {
   })
 
   const handleStatusChange = async (id: string, status: string) => {
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)))
+    const item = items.find((i) => i.id === id)
+    const shouldAssignOwner = status === 'Em Andamento' && !item?.id_proprietario && !!user?.id
+    setItems((prev) =>
+      prev.map((i) => {
+        if (i.id !== id) return i
+        if (shouldAssignOwner) {
+          return {
+            ...i,
+            status,
+            id_proprietario: user!.id,
+            expand: {
+              ...i.expand,
+              id_proprietario: { id: user!.id, nome_completo: user!.nome_completo },
+            },
+          }
+        }
+        return { ...i, status }
+      }),
+    )
     try {
-      await updateSolicitacaoStatus(id, status)
+      if (shouldAssignOwner) {
+        await updateSolicitacaoStatus(id, status)
+        await assumirSolicitacao(id, user!.id)
+      } else {
+        await updateSolicitacaoStatus(id, status)
+      }
       toast.success('Status atualizado com sucesso!')
     } catch {
       toast.error('Erro ao atualizar status.')
+      loadData()
+    }
+  }
+
+  const handleAssumir = async (id: string) => {
+    if (!user?.id) return
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === id
+          ? {
+              ...i,
+              id_proprietario: user.id,
+              expand: {
+                ...i.expand,
+                id_proprietario: { id: user.id, nome_completo: user.nome_completo },
+              },
+            }
+          : i,
+      ),
+    )
+    try {
+      await assumirSolicitacao(id, user.id)
+      toast.success('Solicitação assumida com sucesso!')
+    } catch {
+      toast.error('Erro ao assumir solicitação.')
       loadData()
     }
   }
@@ -130,13 +182,19 @@ export default function AdminSolicitacoes() {
                 <TableHead className="font-bold text-primary">Colaborador</TableHead>
                 <TableHead className="font-bold text-primary">Título</TableHead>
                 <TableHead className="font-bold text-primary">Descrição</TableHead>
+                <TableHead className="font-bold text-primary">Proprietário</TableHead>
                 <TableHead className="font-bold text-primary">Status</TableHead>
                 <TableHead className="font-bold text-primary">Data</TableHead>
+                <TableHead className="font-bold text-primary w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item) => (
-                <TableRow key={item.id} className="border-slate-100 hover:bg-primary/5">
+                <TableRow
+                  key={item.id}
+                  className="border-slate-100 hover:bg-primary/5 cursor-pointer"
+                  onClick={() => navigate(`/admin/solicitacoes/${item.id}`)}
+                >
                   <TableCell className="font-medium text-slate-900">
                     {item.expand?.id_usuario?.nome_completo || '—'}
                   </TableCell>
@@ -144,7 +202,24 @@ export default function AdminSolicitacoes() {
                   <TableCell className="text-slate-500 max-w-xs truncate">
                     {item.descricao || '—'}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    {item.expand?.id_proprietario?.nome_completo ? (
+                      <span className="text-slate-700 text-sm">
+                        {item.expand.id_proprietario.nome_completo}
+                      </span>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/5"
+                        onClick={() => handleAssumir(item.id)}
+                      >
+                        <UserCheck className="w-3 h-3" />
+                        Assumir
+                      </Button>
+                    )}
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <Select
                       value={item.status}
                       onValueChange={(v) => handleStatusChange(item.id, v)}
@@ -162,6 +237,9 @@ export default function AdminSolicitacoes() {
                   <TableCell className="text-slate-600 whitespace-nowrap">
                     {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
                   </TableCell>
+                  <TableCell className="text-slate-400">
+                    <MessageSquare className="w-4 h-4" />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -170,7 +248,11 @@ export default function AdminSolicitacoes() {
       </Card>
       <div className="md:hidden space-y-3">
         {items.map((item) => (
-          <Card key={item.id} className="border-slate-200">
+          <Card
+            key={item.id}
+            className="border-slate-200 cursor-pointer hover:border-primary/30 transition-colors"
+            onClick={() => navigate(`/admin/solicitacoes/${item.id}`)}
+          >
             <CardContent className="p-4 space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-medium text-slate-900">{item.titulo}</h3>
@@ -179,19 +261,46 @@ export default function AdminSolicitacoes() {
               <p className="text-sm text-slate-500">
                 {item.expand?.id_usuario?.nome_completo || '—'}
               </p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Proprietário:</span>
+                {item.expand?.id_proprietario?.nome_completo ? (
+                  <span className="text-xs text-slate-600">
+                    {item.expand.id_proprietario.nome_completo}
+                  </span>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/5"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleAssumir(item.id)
+                    }}
+                  >
+                    <UserCheck className="w-3 h-3" />
+                    Assumir
+                  </Button>
+                )}
+              </div>
               <p className="text-sm text-slate-400">
                 {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
               </p>
-              <Select value={item.status} onValueChange={(v) => handleStatusChange(item.id, v)}>
-                <SelectTrigger className="w-full h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Solicitada">Solicitada</SelectItem>
-                  <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                  <SelectItem value="Finalizada">Finalizada</SelectItem>
-                </SelectContent>
-              </Select>
+              <div onClick={(e) => e.stopPropagation()}>
+                <Select value={item.status} onValueChange={(v) => handleStatusChange(item.id, v)}>
+                  <SelectTrigger className="w-full h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Solicitada">Solicitada</SelectItem>
+                    <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                    <SelectItem value="Finalizada">Finalizada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-1 text-primary text-xs font-medium">
+                <MessageSquare className="w-3.5 h-3.5" />
+                Abrir conversa
+              </div>
             </CardContent>
           </Card>
         ))}

@@ -3,6 +3,7 @@ import pb from '@/lib/pocketbase/client'
 export interface AdminSolicitacao {
   id: string
   id_usuario: string
+  id_proprietario: string
   titulo: string
   descricao: string
   status: string
@@ -14,6 +15,10 @@ export interface AdminSolicitacao {
       nome_completo: string
       cpf: string
     }
+    id_proprietario?: {
+      id: string
+      nome_completo: string
+    }
   }
 }
 
@@ -21,17 +26,21 @@ export async function listAdminSolicitacoes(departamento: string): Promise<Admin
   return (await pb.collection('solicitacoes').getFullList({
     filter: `departamento = "${departamento}"`,
     sort: '-created',
-    expand: 'id_usuario',
+    expand: 'id_usuario,id_proprietario',
   })) as AdminSolicitacao[]
 }
 
 export async function listAllAdminSolicitacoes(): Promise<AdminSolicitacao[]> {
   return (await pb.collection('solicitacoes').getFullList({
     sort: '-created',
-    expand: 'id_usuario',
+    expand: 'id_usuario,id_proprietario',
   })) as AdminSolicitacao[]
 }
 
 export async function updateSolicitacaoStatus(id: string, status: string): Promise<void> {
   await pb.collection('solicitacoes').update(id, { status })
+}
+
+export async function assumirSolicitacao(id: string, adminUserId: string): Promise<void> {
+  await pb.collection('solicitacoes').update(id, { id_proprietario: adminUserId })
 }

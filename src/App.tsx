@@ -14,6 +14,7 @@ import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 import Recibos from './pages/Recibos'
 import Solicitacoes from './pages/Solicitacoes'
+import SolicitacaoChat from './pages/SolicitacaoChat'
 import Agendamentos from './pages/Agendamentos'
 import Servicos from './pages/Servicos'
 import Newsletter from './pages/Newsletter'
@@ -24,6 +25,7 @@ import AdminLogin from './pages/admin/AdminLogin'
 import AdminLayout from './components/admin/AdminLayout'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminSolicitacoes from './pages/admin/AdminSolicitacoes'
+import AdminSolicitacaoChat from './pages/admin/AdminSolicitacaoChat'
 import AdminAgendamentos from './pages/admin/AdminAgendamentos'
 import AdminInformativos from './pages/admin/AdminInformativos'
 import AdminPopups from './pages/admin/AdminPopups'
@@ -61,6 +63,7 @@ const App = () => (
                 <Route path="/telemetria" element={<Telemetria />} />
                 <Route path="/recibos" element={<Recibos />} />
                 <Route path="/solicitacoes" element={<Solicitacoes />} />
+                <Route path="/solicitacoes/:id" element={<SolicitacaoChat />} />
                 <Route path="/agendamentos" element={<Agendamentos />} />
                 <Route path="/servicos" element={<Servicos />} />
                 <Route path="/newsletter" element={<Newsletter />} />
@@ -73,6 +76,7 @@ const App = () => (
               <Route element={<AdminLayout />}>
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
                 <Route path="/admin/solicitacoes" element={<AdminSolicitacoes />} />
+                <Route path="/admin/solicitacoes/:id" element={<AdminSolicitacaoChat />} />
                 <Route path="/admin/agendamentos" element={<AdminAgendamentos />} />
                 <Route path="/admin/informativos" element={<AdminInformativos />} />
                 <Route path="/admin/popups" element={<AdminPopups />} />
