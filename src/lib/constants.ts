@@ -1,12 +1,12 @@
 export const DEPARTAMENTOS = [
-  'Recursos Humanos',
+  'Administrador',
+  'DP',
   'Financeiro',
-  'Operações',
-  'Manutenção',
+  'Operacional',
+  'RH',
   'TI',
-  'Administrativo',
 ] as const
 
 export const DEPARTAMENTOS_SOLICITACAO = ['RH', 'SESMT', 'DP', 'TI', 'Operação'] as const
 
-export const PERFIIS = ['TI', 'Admin', 'Gestor', 'Colaborador'] as const
+export const PERFIIS = ['Administrador', 'DP', 'Financeiro', 'Operacional', 'RH', 'TI'] as const

@@ -13,11 +13,13 @@ import {
 import { useAuth } from '@/hooks/use-auth'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
 import { getInitials } from '@/lib/utils'
+import { getStoredAdminToken } from '@/services/admin-auth'
 
 export function AdminHeader({ onMenuClick }: { onMenuClick?: () => void }) {
   const navigate = useNavigate()
   const { setSession } = useAuth()
-  const { user, token, logout } = useAdminAuth()
+  const { user, signOut } = useAdminAuth()
+  const token = getStoredAdminToken()
 
   const nome = user?.nome_completo || 'Administrador'
 
@@ -34,7 +36,7 @@ export function AdminHeader({ onMenuClick }: { onMenuClick?: () => void }) {
   }
 
   const handleLogout = () => {
-    logout()
+    signOut()
     navigate('/admin')
   }
 

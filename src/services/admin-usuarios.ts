@@ -103,7 +103,7 @@ export async function listAdminsForTransfer(
   perfil: string,
   excludeId: string,
 ): Promise<UsuarioAdmin[]> {
-  const adminProfiles = ['Administrador', 'RH', 'TI', 'Financeiro', 'Gerente']
+  const adminProfiles = ['Administrador', 'DP', 'Financeiro', 'Operacional', 'RH', 'TI']
   const perfilFilter = adminProfiles.map((p) => `perfil = "${p}"`).join(' || ')
   const filter =
     perfil === 'TI'

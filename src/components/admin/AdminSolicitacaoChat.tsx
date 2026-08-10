@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   AlertCircle,
   CheckCircle2,
+  Shuffle,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -44,6 +45,7 @@ import {
   assumirSolicitacao,
   type AdminSolicitacao,
 } from '@/services/admin-solicitacoes'
+import { TransferirDialog } from '@/components/admin/TransferirDialog'
 import { extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
 import { cn } from '@/lib/utils'
 
@@ -120,6 +122,7 @@ export function AdminSolicitacaoChat() {
   const [sending, setSending] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [finalizing, setFinalizing] = useState(false)
+  const [transferOpen, setTransferOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const autoAssignRef = useRef(false)
@@ -228,6 +231,10 @@ export function AdminSolicitacaoChat() {
     }
   }
 
+  const handleTransferred = (newDepartamento: string) => {
+    navigate(`/admin/solicitacoes?departamento=${encodeURIComponent(newDepartamento)}`)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -263,50 +270,72 @@ export function AdminSolicitacaoChat() {
             </span>
           </div>
         </div>
-        {solicitacao?.status !== 'Finalizada' && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="outline"
-                disabled={finalizing}
-                className="gap-2 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800"
-              >
-                {finalizing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4" />
-                )}
-                Finalizar
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Finalizar solicitação</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Deseja realmente finalizar esta solicitação? Esta ação não pode ser desfeita.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={finalizing}>Cancelar</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleFinalize}
+        <div className="flex items-center gap-2">
+          {solicitacao?.status !== 'Finalizada' && (
+            <Button
+              variant="outline"
+              onClick={() => setTransferOpen(true)}
+              className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
+            >
+              <Shuffle className="w-4 h-4" />
+              Transferir
+            </Button>
+          )}
+          {solicitacao?.status !== 'Finalizada' && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
                   disabled={finalizing}
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className="gap-2 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800"
                 >
                   {finalizing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-1" />
-                      Finalizando...
-                    </>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    'Sim, finalizar'
+                    <CheckCircle2 className="w-4 h-4" />
                   )}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
+                  Finalizar
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Finalizar solicitação</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Deseja realmente finalizar esta solicitação? Esta ação não pode ser desfeita.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={finalizing}>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleFinalize}
+                    disabled={finalizing}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    {finalizing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                        Finalizando...
+                      </>
+                    ) : (
+                      'Sim, finalizar'
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
+
+      {solicitacao && (
+        <TransferirDialog
+          open={transferOpen}
+          onOpenChange={setTransferOpen}
+          solicitacaoId={solicitacao.id}
+          currentDepartamento={solicitacao.departamento}
+          onTransferred={handleTransferred}
+        />
+      )}
 
       <Card className="border-slate-200 flex flex-col h-[60vh] md:h-[65vh]">
         <CardContent className="p-4 flex-1 overflow-y-auto space-y-4">

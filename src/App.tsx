@@ -4,6 +4,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 import { AdminAuthProvider, useAdminAuth } from '@/hooks/use-admin-auth'
+import { canAccessInformativos } from '@/lib/admin-profiles'
 
 import Login from './pages/Login'
 import EsqueciSenha from './pages/EsqueciSenha'
@@ -45,6 +46,12 @@ function AdminProtectedRoute() {
   return <Outlet />
 }
 
+function ProtectedInformativosRoute() {
+  const { user } = useAdminAuth()
+  if (!canAccessInformativos(user?.perfil)) return <Navigate to="/admin/dashboard" replace />
+  return <AdminInformativos />
+}
+
 const App = () => (
   <BrowserRouter>
     <AuthProvider>
@@ -78,7 +85,7 @@ const App = () => (
                 <Route path="/admin/solicitacoes" element={<AdminSolicitacoes />} />
                 <Route path="/admin/solicitacoes/:id" element={<AdminSolicitacaoChat />} />
                 <Route path="/admin/agendamentos" element={<AdminAgendamentos />} />
-                <Route path="/admin/informativos" element={<AdminInformativos />} />
+                <Route path="/admin/informativos" element={<ProtectedInformativosRoute />} />
                 <Route path="/admin/popups" element={<AdminPopups />} />
                 <Route path="/admin/usuarios" element={<AdminUsuarios />} />
                 <Route path="/admin/telemetria/sincronizacao" element={<AdminTelemetriaSync />} />

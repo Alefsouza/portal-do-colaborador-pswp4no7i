@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { Loader2, Shuffle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -16,51 +16,39 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { listAdminsForTransfer, type UsuarioAdmin } from '@/services/admin-usuarios'
-import { transferSolicitacao } from '@/services/admin-solicitacoes'
+import { DEPARTAMENTOS_SOLICITACAO } from '@/lib/constants'
+import { transferToDepartment } from '@/services/admin-solicitacoes'
 
 interface TransferirDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   solicitacaoId: string
-  departamento: string
-  perfil: string
-  currentAdminId: string
-  onTransferred: () => void
+  currentDepartamento: string
+  onTransferred: (newDepartamento: string) => void
 }
 
 export function TransferirDialog({
   open,
   onOpenChange,
   solicitacaoId,
-  departamento,
-  perfil,
-  currentAdminId,
+  currentDepartamento,
   onTransferred,
 }: TransferirDialogProps) {
-  const [admins, setAdmins] = useState<UsuarioAdmin[]>([])
-  const [selectedId, setSelectedId] = useState('')
+  const [selectedDept, setSelectedDept] = useState('')
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    if (!open) return
-    setLoading(true)
-    setSelectedId('')
-    listAdminsForTransfer(departamento, perfil, currentAdminId)
-      .then(setAdmins)
-      .catch(() => toast.error('Erro ao carregar administradores.'))
-      .finally(() => setLoading(false))
-  }, [open, departamento, perfil, currentAdminId])
-
   const handleTransfer = async () => {
-    if (!selectedId) return
+    if (!selectedDept) return
+    setLoading(true)
     try {
-      await transferSolicitacao(solicitacaoId, selectedId)
+      await transferToDepartment(solicitacaoId, selectedDept)
       toast.success('Solicitação transferida com sucesso!')
       onOpenChange(false)
-      onTransferred()
+      onTransferred(selectedDept)
     } catch {
       toast.error('Erro ao transferir solicitação.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -68,35 +56,33 @@ export function TransferirDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Transferir Solicitação</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Shuffle className="w-5 h-5 text-primary" />
+            Transferir Solicitação
+          </DialogTitle>
         </DialogHeader>
-        {loading ? (
-          <div className="flex justify-center py-4">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          </div>
-        ) : admins.length === 0 ? (
-          <p className="text-sm text-slate-500 py-4">
-            Nenhum administrador disponível para transferência.
-          </p>
-        ) : (
-          <Select value={selectedId} onValueChange={setSelectedId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um administrador" />
-            </SelectTrigger>
-            <SelectContent>
-              {admins.map((admin) => (
-                <SelectItem key={admin.id} value={admin.id}>
-                  {admin.nome_completo} ({admin.perfil})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        <p className="text-sm text-slate-500">
+          Selecione o departamento de destino. O proprietário atual será removido.
+        </p>
+        <Select value={selectedDept} onValueChange={setSelectedDept}>
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione um departamento" />
+          </SelectTrigger>
+          <SelectContent>
+            {DEPARTAMENTOS_SOLICITACAO.map((dept) => (
+              <SelectItem key={dept} value={dept} disabled={dept === currentDepartamento}>
+                {dept}
+                {dept === currentDepartamento && ' (atual)'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             Cancelar
           </Button>
-          <Button onClick={handleTransfer} disabled={!selectedId || loading}>
+          <Button onClick={handleTransfer} disabled={!selectedDept || loading} className="gap-2">
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
             Transferir
           </Button>
         </DialogFooter>

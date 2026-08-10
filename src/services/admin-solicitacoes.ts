@@ -4,6 +4,7 @@ export interface AdminSolicitacao {
   id: string
   id_usuario: string
   id_proprietario: string
+  departamento: string
   titulo: string
   descricao: string
   status: string
@@ -49,4 +50,8 @@ export async function updateSolicitacaoStatus(id: string, status: string): Promi
 
 export async function transferSolicitacao(id: string, idProprietario: string): Promise<void> {
   await pb.collection('solicitacoes').update(id, { id_proprietario: idProprietario })
+}
+
+export async function transferToDepartment(id: string, departamento: string): Promise<void> {
+  await pb.collection('solicitacoes').update(id, { departamento, id_proprietario: '' })
 }

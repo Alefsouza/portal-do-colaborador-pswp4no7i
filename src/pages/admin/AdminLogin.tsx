@@ -4,10 +4,11 @@ import { Eye, EyeOff, Loader2, Bus, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { cn } from '@/lib/utils'
 
 export default function AdminLogin() {
-  const { isAuthenticated, login } = useAdminAuth()
+  const { isAuthenticated, signIn: login } = useAdminAuth()
   const navigate = useNavigate()
   const [cpf, setCpf] = useState('')
   const [password, setPassword] = useState('')
@@ -27,7 +28,7 @@ export default function AdminLogin() {
     setIsLoading(false)
 
     if (result.error) {
-      setError(result.error)
+      setError(getErrorMessage(result.error))
     } else {
       navigate('/admin/dashboard')
     }

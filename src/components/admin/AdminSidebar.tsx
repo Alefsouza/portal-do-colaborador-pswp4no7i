@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
 import { useNavigate } from 'react-router-dom'
+import { canAccessInformativos } from '@/lib/admin-profiles'
 import { cn } from '@/lib/utils'
 
 interface NavItemProps {
@@ -44,16 +45,18 @@ function NavItem({ to, label, icon: Icon, onNavigate }: NavItemProps) {
 }
 
 export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const { logout, user } = useAdminAuth()
+  const { signOut, user } = useAdminAuth()
   const navigate = useNavigate()
 
   const adminNav = [
     { label: 'Dashboard', to: '/admin/dashboard', icon: LayoutDashboard },
     { label: 'Solicitações', to: '/admin/solicitacoes', icon: ClipboardList },
     { label: 'Agendamentos', to: '/admin/agendamentos', icon: CalendarClock },
-    { label: 'Informativos', to: '/admin/informativos', icon: Megaphone },
+    ...(canAccessInformativos(user?.perfil)
+      ? [{ label: 'Informativos', to: '/admin/informativos', icon: Megaphone }]
+      : []),
     { label: 'Pop-ups', to: '/admin/popups', icon: Bell },
-    ...(user?.perfil === 'TI' || user?.perfil === 'Admin'
+    ...(user?.perfil === 'TI' || user?.perfil === 'Admin' || user?.perfil === 'Administrador'
       ? [
           {
             label: 'Sincronização Telemetria',
@@ -68,7 +71,7 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   ]
 
   const handleLogout = () => {
-    logout()
+    signOut()
     navigate('/admin')
   }
 

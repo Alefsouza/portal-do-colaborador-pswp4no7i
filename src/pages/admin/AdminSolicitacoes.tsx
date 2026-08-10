@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
-import { Loader2, AlertCircle, ClipboardList, MessageSquare } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Loader2, AlertCircle, ClipboardList, MessageSquare, Filter } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -31,6 +31,7 @@ import {
   updateSolicitacaoStatus,
   type AdminSolicitacao,
 } from '@/services/admin-solicitacoes'
+import { DEPARTAMENTOS_SOLICITACAO } from '@/lib/constants'
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -47,9 +48,14 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function AdminSolicitacoes() {
   const { user } = useAdminAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [items, setItems] = useState<AdminSolicitacao[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+
+  const deptFilter = searchParams.get('departamento') || ''
+
+  const activeDepartamento = deptFilter || (user?.perfil === 'TI' ? '' : user?.departamento || '')
 
   const loadData = useCallback(async () => {
     if (!user) return
@@ -57,17 +63,19 @@ export default function AdminSolicitacoes() {
     setLoading(true)
     try {
       setError(false)
-      const data =
-        user.perfil === 'TI'
-          ? await listAllAdminSolicitacoes()
-          : await listAdminSolicitacoes(user.departamento)
+      let data: AdminSolicitacao[]
+      if (activeDepartamento) {
+        data = await listAdminSolicitacoes(activeDepartamento)
+      } else {
+        data = await listAllAdminSolicitacoes()
+      }
       setItems(data)
     } catch {
       setError(true)
     } finally {
       setLoading(false)
     }
-  }, [user?.departamento, user?.perfil])
+  }, [user?.departamento, user?.perfil, activeDepartamento])
 
   useEffect(() => {
     loadData()
@@ -116,13 +124,40 @@ export default function AdminSolicitacoes() {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Solicitações</h1>
-        <p className="text-slate-500 mt-1">
-          {user?.perfil === 'TI'
-            ? 'Gerencie as solicitações de todos os departamentos'
-            : 'Gerencie as solicitações do departamento'}
-        </p>
+      <div className="flex flex-col gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Solicitações</h1>
+          <p className="text-slate-500 mt-1">
+            {activeDepartamento
+              ? `Gerencie as solicitações do departamento ${activeDepartamento}`
+              : 'Gerencie as solicitações de todos os departamentos'}
+          </p>
+        </div>
+        {user?.perfil === 'TI' && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 text-sm text-slate-500">
+              <Filter className="w-4 h-4" />
+              <span>Filtrar por departamento:</span>
+            </div>
+            <Button
+              variant={!deptFilter ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSearchParams({})}
+            >
+              Todos
+            </Button>
+            {DEPARTAMENTOS_SOLICITACAO.map((dept) => (
+              <Button
+                key={dept}
+                variant={deptFilter === dept ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setSearchParams({ departamento: dept })}
+              >
+                {dept}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
       <Card className="border-slate-200 hidden md:block">
         <CardContent className="p-0">
