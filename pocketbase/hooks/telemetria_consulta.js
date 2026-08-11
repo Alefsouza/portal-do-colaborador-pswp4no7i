@@ -24,6 +24,14 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     return e.json(401, { error: 'Sessão inválida.' })
   }
 
+  var userNomeCompleto = ''
+  try {
+    var usuarioRec = $app.findRecordById('usuarios', userId)
+    if (usuarioRec) {
+      userNomeCompleto = usuarioRec.getString('nome_completo') || ''
+    }
+  } catch (_) {}
+
   var body = e.requestInfo().body || {}
   var data = (body.data || '').trim()
   if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) {
@@ -41,31 +49,48 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     return e.json(400, { error: 'Consulta disponível apenas para os últimos 30 dias.' })
   }
 
+  var filterBase = '(motorista_id = {:uid}'
+  var filterParams = { uid: userId, d: data, c: 'direcao' }
+  if (userNomeCompleto) {
+    filterBase += ' || motorista_nome = {:nome}'
+    filterParams.nome = userNomeCompleto
+  }
+  filterBase += ') && data = {:d} && classificacao = {:c}'
+
   var drivingEvents = []
   try {
     drivingEvents = $app.findRecordsByFilter(
       'telemetria_eventos',
-      'motorista_id = {:uid} && data = {:d} && classificacao = {:c}',
+      filterBase,
       '-data_hora',
       1000,
       0,
-      { uid: userId, d: data, c: 'direcao' },
+      filterParams,
     )
   } catch (_) {}
 
+  var technicalFilterParams = { uid: userId, d: data, c: 'tecnico' }
+  if (userNomeCompleto) {
+    technicalFilterParams.nome = userNomeCompleto
+  }
   var technicalEvents = []
   try {
     technicalEvents = $app.findRecordsByFilter(
       'telemetria_eventos',
-      'motorista_id = {:uid} && data = {:d} && classificacao = {:c}',
+      filterBase,
       '-data_hora',
       1000,
       0,
-      { uid: userId, d: data, c: 'tecnico' },
+      technicalFilterParams,
     )
   } catch (_) {}
 
+  var seenIds = {}
+
   function buildEvent(rec) {
+    var recId = rec.id
+    if (seenIds[recId]) return null
+    seenIds[recId] = true
     return {
       data: rec.getString('hora_inicio') || rec.getString('data_hora'),
       tipo: rec.getString('tipo_evento'),
@@ -79,12 +104,14 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
 
   var eventosDirecao = []
   for (var i = 0; i < drivingEvents.length; i++) {
-    eventosDirecao.push(buildEvent(drivingEvents[i]))
+    var ev = buildEvent(drivingEvents[i])
+    if (ev) eventosDirecao.push(ev)
   }
 
   var eventosTecnicos = []
   for (var j = 0; j < technicalEvents.length; j++) {
-    eventosTecnicos.push(buildEvent(technicalEvents[j]))
+    var evT = buildEvent(technicalEvents[j])
+    if (evT) eventosTecnicos.push(evT)
   }
 
   var porTipo = {}
