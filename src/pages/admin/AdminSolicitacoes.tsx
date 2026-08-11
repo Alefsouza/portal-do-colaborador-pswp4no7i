@@ -111,17 +111,6 @@ export default function AdminSolicitacoes() {
       </Alert>
     )
   }
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-          <ClipboardList className="w-8 h-8 text-primary" />
-        </div>
-        <p className="text-slate-500">Nenhuma solicitação encontrada.</p>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6 animate-fade-in-up">
       <div className="flex flex-col gap-4">
@@ -159,36 +148,96 @@ export default function AdminSolicitacoes() {
           </div>
         )}
       </div>
-      <Card className="border-slate-200 hidden md:block">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-primary/5 hover:bg-primary/5">
-                <TableHead className="font-bold text-primary">Colaborador</TableHead>
-                <TableHead className="font-bold text-primary">Título</TableHead>
-                <TableHead className="font-bold text-primary">Descrição</TableHead>
-                <TableHead className="font-bold text-primary">Status</TableHead>
-                <TableHead className="font-bold text-primary">Proprietário</TableHead>
-                <TableHead className="font-bold text-primary">Data</TableHead>
-                <TableHead className="font-bold text-primary">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((item) => (
-                <TableRow key={item.id} className="border-slate-100 hover:bg-primary/5">
-                  <TableCell className="font-medium text-slate-900">
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+            <ClipboardList className="w-8 h-8 text-primary" />
+          </div>
+          <p className="text-slate-500">Nenhuma solicitação encontrada.</p>
+        </div>
+      ) : (
+        <>
+          <Card className="border-slate-200 hidden md:block">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-primary/5 hover:bg-primary/5">
+                    <TableHead className="font-bold text-primary">Colaborador</TableHead>
+                    <TableHead className="font-bold text-primary">Título</TableHead>
+                    <TableHead className="font-bold text-primary">Descrição</TableHead>
+                    <TableHead className="font-bold text-primary">Status</TableHead>
+                    <TableHead className="font-bold text-primary">Proprietário</TableHead>
+                    <TableHead className="font-bold text-primary">Data</TableHead>
+                    <TableHead className="font-bold text-primary">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow key={item.id} className="border-slate-100 hover:bg-primary/5">
+                      <TableCell className="font-medium text-slate-900">
+                        {item.expand?.id_usuario?.nome_completo || '—'}
+                      </TableCell>
+                      <TableCell className="text-slate-700">{item.titulo}</TableCell>
+                      <TableCell className="text-slate-500 max-w-xs truncate">
+                        {item.descricao || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={item.status}
+                          onValueChange={(v) => handleStatusChange(item.id, v)}
+                        >
+                          <SelectTrigger className="w-36 h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Solicitada">Solicitada</SelectItem>
+                            <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                            <SelectItem value="Finalizada">Finalizada</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-slate-700">
+                        {item.expand?.id_proprietario?.nome_completo || '—'}
+                      </TableCell>
+                      <TableCell className="text-slate-600 whitespace-nowrap">
+                        {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
+                      </TableCell>
+                      <TableCell>
+                        <Button asChild variant="ghost" size="sm" className="h-8 gap-1">
+                          <Link to={`/admin/solicitacoes/${item.id}`}>
+                            <MessageSquare className="w-4 h-4" /> Ver
+                          </Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+          <div className="md:hidden space-y-3">
+            {items.map((item) => (
+              <Card key={item.id} className="border-slate-200">
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-medium text-slate-900">{item.titulo}</h3>
+                    <StatusBadge status={item.status} />
+                  </div>
+                  <p className="text-sm text-slate-500">
                     {item.expand?.id_usuario?.nome_completo || '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-700">{item.titulo}</TableCell>
-                  <TableCell className="text-slate-500 max-w-xs truncate">
-                    {item.descricao || '—'}
-                  </TableCell>
-                  <TableCell>
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    Proprietário: {item.expand?.id_proprietario?.nome_completo || '—'}
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
+                  </p>
+                  <div className="flex items-center gap-2">
                     <Select
                       value={item.status}
                       onValueChange={(v) => handleStatusChange(item.id, v)}
                     >
-                      <SelectTrigger className="w-36 h-9">
+                      <SelectTrigger className="w-full h-9">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -197,64 +246,18 @@ export default function AdminSolicitacoes() {
                         <SelectItem value="Finalizada">Finalizada</SelectItem>
                       </SelectContent>
                     </Select>
-                  </TableCell>
-                  <TableCell className="text-slate-700">
-                    {item.expand?.id_proprietario?.nome_completo || '—'}
-                  </TableCell>
-                  <TableCell className="text-slate-600 whitespace-nowrap">
-                    {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
-                  </TableCell>
-                  <TableCell>
-                    <Button asChild variant="ghost" size="sm" className="h-8 gap-1">
+                    <Button asChild variant="outline" size="sm" className="shrink-0">
                       <Link to={`/admin/solicitacoes/${item.id}`}>
-                        <MessageSquare className="w-4 h-4" /> Ver
+                        <MessageSquare className="w-4 h-4" />
                       </Link>
                     </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-      <div className="md:hidden space-y-3">
-        {items.map((item) => (
-          <Card key={item.id} className="border-slate-200">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="font-medium text-slate-900">{item.titulo}</h3>
-                <StatusBadge status={item.status} />
-              </div>
-              <p className="text-sm text-slate-500">
-                {item.expand?.id_usuario?.nome_completo || '—'}
-              </p>
-              <p className="text-sm text-slate-400">
-                Proprietário: {item.expand?.id_proprietario?.nome_completo || '—'}
-              </p>
-              <p className="text-sm text-slate-400">
-                {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
-              </p>
-              <div className="flex items-center gap-2">
-                <Select value={item.status} onValueChange={(v) => handleStatusChange(item.id, v)}>
-                  <SelectTrigger className="w-full h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Solicitada">Solicitada</SelectItem>
-                    <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                    <SelectItem value="Finalizada">Finalizada</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button asChild variant="outline" size="sm" className="shrink-0">
-                  <Link to={`/admin/solicitacoes/${item.id}`}>
-                    <MessageSquare className="w-4 h-4" />
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
