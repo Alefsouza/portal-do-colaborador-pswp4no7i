@@ -9,7 +9,7 @@ import {
   Bell,
   LogOut,
   Users,
-  RefreshCw,
+  Upload,
 } from 'lucide-react'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
 import { useNavigate } from 'react-router-dom'
@@ -59,9 +59,9 @@ export function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
     ...(user?.perfil === 'TI' || user?.perfil === 'Admin' || user?.perfil === 'Administrador'
       ? [
           {
-            label: 'Sincronização Telemetria',
-            to: '/admin/telemetria/sincronizacao',
-            icon: RefreshCw,
+            label: 'Importação Telemetria',
+            to: '/admin/telemetria/importacao',
+            icon: Upload,
           },
         ]
       : []),

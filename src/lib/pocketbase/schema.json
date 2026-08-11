@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-11T17:43:46.892Z",
+  "generatedAt": "2026-08-11T18:27:03.728Z",
   "collections": [
     {
       "name": "users",
@@ -29,19 +29,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -107,28 +102,21 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "avatar",
@@ -182,19 +170,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "anexo",
@@ -219,10 +202,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": [
-            "Todos",
-            "Especificos"
-          ]
+          "selectValues": ["Todos", "Especificos"]
         },
         {
           "name": "destinatarios",
@@ -232,9 +212,7 @@
           "collectionRef": "usuarios"
         }
       ],
-      "indexes": [
-        "CREATE INDEX idx_informativos_status_ativo ON informativos (status_ativo)"
-      ]
+      "indexes": ["CREATE INDEX idx_informativos_status_ativo ON informativos (status_ativo)"]
     },
     {
       "name": "solicitacoes",
@@ -277,39 +255,28 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onUpdate"]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "status",
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": [
-            "Solicitada",
-            "Em Andamento",
-            "Finalizada"
-          ]
+          "selectValues": ["Solicitada", "Em Andamento", "Finalizada"]
         },
         {
           "name": "id_proprietario",
@@ -370,31 +337,21 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "status",
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": [
-            "Pendente",
-            "Confirmado",
-            "Cancelado",
-            "Realizado"
-          ]
+          "selectValues": ["Pendente", "Confirmado", "Cancelado", "Realizado"]
         }
       ],
       "indexes": [
@@ -430,19 +387,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
           "name": "titulo",
@@ -491,19 +443,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -556,19 +503,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -669,19 +611,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -801,24 +738,117 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "motorista_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "hora_inicio",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "hora_fim",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "frota_placa",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_veiculo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_principal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "categoria_evento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "direcao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "distancia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "velocidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "latitude_inicial",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "longitude_inicial",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "latitude_final",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "longitude_final",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "processado_em",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "motorista_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "usuarios"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_telemetria_eventos_worker_data_class ON telemetria_eventos (worker_id, data, classificacao)",
-        "CREATE UNIQUE INDEX idx_telemetria_eventos_evento ON telemetria_eventos (evento_id)"
+        "CREATE UNIQUE INDEX idx_telemetria_eventos_evento ON telemetria_eventos (evento_id)",
+        "CREATE INDEX `idx_telemetria_eventos_motorista_data_class` ON `telemetria_eventos` (motorista_id, data, classificacao)"
       ]
     },
     {
@@ -909,19 +939,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [
@@ -958,10 +983,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": [
-            "Colaborador",
-            "Admin"
-          ]
+          "selectValues": ["Colaborador", "Admin"]
         },
         {
           "name": "mensagem",
@@ -980,19 +1002,14 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate"
-          ]
+          "autodateTriggers": ["onCreate"]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": [
-            "onCreate",
-            "onUpdate"
-          ]
+          "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
       "indexes": [

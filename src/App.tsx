@@ -29,7 +29,7 @@ import AdminAgendamentos from './pages/admin/AdminAgendamentos'
 import AdminInformativos from './pages/admin/AdminInformativos'
 import AdminPopups from './pages/admin/AdminPopups'
 import AdminUsuarios from './pages/admin/AdminUsuarios'
-import AdminTelemetriaSync from './pages/admin/AdminTelemetriaSync'
+import AdminTelemetriaImportacao from './pages/admin/AdminTelemetriaImportacao'
 import AdminSolicitacaoChat from './pages/admin/AdminSolicitacaoChat'
 import SolicitacaoChat from './pages/SolicitacaoChat'
 
@@ -88,7 +88,10 @@ const App = () => (
                 <Route path="/admin/informativos" element={<ProtectedInformativosRoute />} />
                 <Route path="/admin/popups" element={<AdminPopups />} />
                 <Route path="/admin/usuarios" element={<AdminUsuarios />} />
-                <Route path="/admin/telemetria/sincronizacao" element={<AdminTelemetriaSync />} />
+                <Route
+                  path="/admin/telemetria/importacao"
+                  element={<AdminTelemetriaImportacao />}
+                />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
