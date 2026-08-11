@@ -51,6 +51,13 @@ export default function AdminTelemetriaImportacao() {
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      const validExtensions = ['.csv', '.txt']
+      const fileExtension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+      if (!validExtensions.includes(fileExtension)) {
+        toast.error('Formato de arquivo não suportado. Selecione um arquivo .csv ou .txt.')
+        e.target.value = ''
+        return
+      }
       setSelectedFile(file)
       setImportResult(null)
       setImportError(null)
@@ -101,10 +108,10 @@ export default function AdminTelemetriaImportacao() {
     <div className="space-y-6 animate-fade-in-up">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
-          Importação de Telemetria - Kontrow CSV
+          Importação de Telemetria - Kontrow
         </h1>
         <p className="text-slate-500 mt-1 text-sm">
-          Importe arquivos CSV do Kontrow para processar eventos de telemetria.
+          Importe arquivos CSV ou TXT do Kontrow para processar eventos de telemetria.
         </p>
       </div>
 
@@ -115,9 +122,9 @@ export default function AdminTelemetriaImportacao() {
               <Upload className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="font-bold text-slate-900">Importar arquivo CSV</h2>
+              <h2 className="font-bold text-slate-900">Importar arquivo CSV/TXT</h2>
               <p className="text-sm text-slate-500">
-                Selecione um arquivo CSV exportado do Kontrow e processe os dados.
+                Selecione um arquivo CSV ou TXT exportado do Kontrow e processe os dados.
               </p>
             </div>
           </div>
@@ -126,7 +133,7 @@ export default function AdminTelemetriaImportacao() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,.txt,text/csv,text/plain"
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -137,7 +144,7 @@ export default function AdminTelemetriaImportacao() {
                 className="flex-1"
               >
                 <FileSpreadsheet className="w-4 h-4 mr-2" />
-                {selectedFile ? selectedFile.name : 'Selecionar arquivo CSV'}
+                {selectedFile ? selectedFile.name : 'Selecionar arquivo CSV ou TXT'}
               </Button>
               <Button
                 onClick={handleImport}
