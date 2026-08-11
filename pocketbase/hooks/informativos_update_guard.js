@@ -36,6 +36,18 @@ onRecordUpdateRequest((e) => {
       return e.forbiddenError('Apenas usuários do perfil TI podem editar informativos.')
     }
 
+    const body = e.requestInfo().body || {}
+    const recipientType = body.recipient_type || 'Todos'
+    const destinatarios = body.destinatarios || []
+
+    if (recipientType === 'Especificos') {
+      if (!Array.isArray(destinatarios) || destinatarios.length === 0) {
+        return e.badRequestError(
+          'Selecione ao menos um colaborador quando o destinatário é específico.',
+        )
+      }
+    }
+
     e.next()
   } catch (err) {
     return e.forbiddenError('Erro de autenticação.')

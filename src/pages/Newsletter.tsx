@@ -6,9 +6,15 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { useRealtime } from '@/hooks/use-realtime'
-import { listInformativos, getAnexoUrl, type Informativo } from '@/services/admin-informativos'
+import {
+  listInformativosForUser,
+  getAnexoUrl,
+  type Informativo,
+} from '@/services/admin-informativos'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function Newsletter() {
+  const { user } = useAuth()
   const [items, setItems] = useState<Informativo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -17,7 +23,10 @@ export default function Newsletter() {
   const loadData = useCallback(async () => {
     try {
       setError(false)
-      const data = await listInformativos()
+      const userId = user?.id || ''
+      const data = userId
+        ? await listInformativosForUser(userId)
+        : await listInformativosForUser('')
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       setItems(
@@ -42,11 +51,11 @@ export default function Newsletter() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user?.id])
 
   useEffect(() => {
     loadData()
-  }, [loadData])
+  }, [loadData, user?.id])
 
   useRealtime('informativos', () => {
     loadData()

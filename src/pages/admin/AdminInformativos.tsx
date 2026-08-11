@@ -9,6 +9,7 @@ import {
   Download,
   FileText,
   CalendarDays,
+  Users,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -45,6 +46,21 @@ import {
 } from '@/services/admin-informativos'
 import { InformativoFormDialog } from '@/components/admin/InformativoFormDialog'
 import { useAdminAuth } from '@/hooks/use-admin-auth'
+
+function getRecipientLabel(item: Informativo): string {
+  if (!item.recipient_type || item.recipient_type === 'Todos') return 'Todos'
+  const expanded = item.expand?.destinatarios
+  if (expanded && expanded.length === 1) {
+    return expanded[0].nome_completo || expanded[0].registro || '1 usuário'
+  }
+  if (expanded && expanded.length > 1) {
+    return 'Múltiplos usuários'
+  }
+  const ids = Array.isArray(item.destinatarios) ? item.destinatarios : []
+  if (ids.length === 1) return '1 usuário'
+  if (ids.length > 1) return 'Múltiplos usuários'
+  return 'Específicos'
+}
 
 export default function AdminInformativos() {
   const { user } = useAdminAuth()
@@ -141,6 +157,7 @@ export default function AdminInformativos() {
               <TableHeader>
                 <TableRow className="bg-primary/5 hover:bg-primary/5">
                   <TableHead className="font-bold text-primary">Título</TableHead>
+                  <TableHead className="font-bold text-primary">Destinatários</TableHead>
                   <TableHead className="font-bold text-primary">Conteúdo</TableHead>
                   <TableHead className="font-bold text-primary">Departamento</TableHead>
                   <TableHead className="font-bold text-primary">Status</TableHead>
@@ -154,6 +171,19 @@ export default function AdminInformativos() {
                 {items.map((item) => (
                   <TableRow key={item.id} className="border-slate-100 hover:bg-primary/5">
                     <TableCell className="font-medium text-slate-900">{item.titulo}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          !item.recipient_type || item.recipient_type === 'Todos'
+                            ? 'bg-blue-100 text-blue-700 border-blue-200'
+                            : 'bg-purple-100 text-purple-700 border-purple-200'
+                        }
+                      >
+                        <Users className="w-3 h-3 mr-1" />
+                        {getRecipientLabel(item)}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-slate-500 max-w-xs truncate">
                       {item.conteudo}
                     </TableCell>
@@ -251,8 +281,9 @@ export default function AdminInformativos() {
                 </Badge>
               </div>
               <p className="text-sm text-slate-500 line-clamp-2">{item.conteudo}</p>
-              <p className="text-xs text-slate-400">
-                {item.departamento || 'Todos'} •{' '}
+              <p className="text-xs text-slate-400 flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                {getRecipientLabel(item)} • {item.departamento || 'Todos'} •{' '}
                 {format(parseISO(item.created), 'dd/MM/yyyy', { locale: ptBR })}
               </p>
               <div className="flex items-center gap-1 text-xs text-slate-500">

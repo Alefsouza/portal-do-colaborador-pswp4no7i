@@ -10,15 +10,35 @@ export interface Informativo {
   anexo: string
   data_inicio: string
   data_final: string
+  recipient_type: 'Todos' | 'Especificos'
+  destinatarios: string[]
   created: string
   updated: string
+  expand?: {
+    destinatarios?: Array<{
+      id: string
+      nome_completo: string
+      cpf: string
+      registro: string
+    }>
+  }
 }
 
 export async function listInformativos(): Promise<Informativo[]> {
   ensureAdminTokenInStore()
   return (await pb.collection('informativos').getFullList({
     sort: '-created',
+    expand: 'destinatarios',
   })) as Informativo[]
+}
+
+export async function listInformativosForUser(userId: string): Promise<Informativo[]> {
+  const all = (await pb.collection('informativos').getFullList({
+    sort: '-created',
+    expand: 'destinatarios',
+    filter: `status_ativo = true && (recipient_type = "Todos" || destinatarios.id ?= "${userId}")`,
+  })) as Informativo[]
+  return all
 }
 
 export async function createInformativo(data: {
@@ -29,6 +49,8 @@ export async function createInformativo(data: {
   anexo?: File | null
   data_inicio?: string
   data_final?: string
+  recipient_type: 'Todos' | 'Especificos'
+  destinatarios?: string[]
 }): Promise<Informativo> {
   ensureAdminTokenInStore()
   const formData = new FormData()
@@ -38,6 +60,16 @@ export async function createInformativo(data: {
   formData.append('status_ativo', String(data.status_ativo))
   formData.append('data_inicio', data.data_inicio || '')
   formData.append('data_final', data.data_final || '')
+  formData.append('recipient_type', data.recipient_type)
+  if (
+    data.recipient_type === 'Especificos' &&
+    data.destinatarios &&
+    data.destinatarios.length > 0
+  ) {
+    for (const id of data.destinatarios) {
+      formData.append('destinatarios', id)
+    }
+  }
   if (data.anexo) {
     formData.append('anexo', data.anexo)
   }
@@ -55,6 +87,8 @@ export async function updateInformativo(
     removeAnexo?: boolean
     data_inicio?: string
     data_final?: string
+    recipient_type: 'Todos' | 'Especificos'
+    destinatarios?: string[]
   },
 ): Promise<Informativo> {
   ensureAdminTokenInStore()
@@ -65,6 +99,18 @@ export async function updateInformativo(
   formData.append('status_ativo', String(data.status_ativo))
   formData.append('data_inicio', data.data_inicio || '')
   formData.append('data_final', data.data_final || '')
+  formData.append('recipient_type', data.recipient_type)
+  if (
+    data.recipient_type === 'Especificos' &&
+    data.destinatarios &&
+    data.destinatarios.length > 0
+  ) {
+    for (const id of data.destinatarios) {
+      formData.append('destinatarios', id)
+    }
+  } else {
+    formData.append('destinatarios', '')
+  }
   if (data.anexo) {
     formData.append('anexo', data.anexo)
   } else if (data.removeAnexo) {
