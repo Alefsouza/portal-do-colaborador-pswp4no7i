@@ -70,7 +70,7 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     $app
       .logger()
       .warn(
-        'telemetria_consulta: no nome_completo found for user',
+        'telemetria_consulta: no nome_completo found for user, returning empty result',
         'userId',
         userId,
         'cpf',
@@ -109,8 +109,8 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     return e.json(400, { error: 'Consulta disponível apenas para os últimos 30 dias.' })
   }
 
-  var filter = 'motorista_nome = {:nome} && data = {:d}'
-  var params = { nome: userNomeCompleto, d: data }
+  var filter = 'motorista_nome LIKE {:nome} && data = {:d}'
+  var params = { nome: '%' + userNomeCompleto + '%', d: data }
 
   $app
     .logger()
@@ -124,14 +124,32 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
       data,
     )
 
-  var allEvents = $app.findRecordsByFilter(
-    'telemetria_eventos',
-    filter,
-    '-data_hora',
-    1000,
-    0,
-    params,
-  )
+  var allEvents
+  try {
+    allEvents = $app.findRecordsByFilter(
+      'telemetria_eventos',
+      filter,
+      '-data_hora',
+      1000,
+      0,
+      params,
+    )
+  } catch (err) {
+    $app
+      .logger()
+      .error(
+        'telemetria_consulta: query failed',
+        'motorista_nome',
+        userNomeCompleto,
+        'filter',
+        filter,
+        'data',
+        data,
+        'error',
+        String(err),
+      )
+    return e.json(500, { error: String(err) })
+  }
 
   $app
     .logger()

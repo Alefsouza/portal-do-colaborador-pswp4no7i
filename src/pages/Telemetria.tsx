@@ -282,7 +282,7 @@ export default function Telemetria() {
           {totalEventos === 0 ? (
             <Card className="border-slate-200">
               <CardContent className="py-12 text-center">
-                <p className="text-slate-500">Nenhum dado encontrado para esta data.</p>
+                <p className="text-slate-500">Nenhum evento encontrado para a data selecionada.</p>
               </CardContent>
             </Card>
           ) : sortedDrivingEvents.length > 0 ? (
