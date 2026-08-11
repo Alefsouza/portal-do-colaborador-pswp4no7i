@@ -17,10 +17,12 @@ import { useAdminAuth } from '@/hooks/use-admin-auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Progress } from '@/components/ui/progress'
 import {
-  importCsvData,
+  importCsvBatch,
   clearOldTelemetryData,
   type CsvImportResult,
+  type BatchImportResult,
 } from '@/services/admin-telemetria-import'
 
 export default function AdminTelemetriaImportacao() {
@@ -30,8 +32,10 @@ export default function AdminTelemetriaImportacao() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState<CsvImportResult | null>(null)
+  const [importResult, setImportResult] = useState<BatchImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [progressValue, setProgressValue] = useState(0)
+  const [progressLabel, setProgressLabel] = useState('')
 
   const [clearing, setClearing] = useState(false)
   const [clearResult, setClearResult] = useState<{
@@ -69,11 +73,23 @@ export default function AdminTelemetriaImportacao() {
     setImporting(true)
     setImportResult(null)
     setImportError(null)
+    setProgressValue(0)
+    setProgressLabel('')
     try {
       const csvContent = await selectedFile.text()
-      const result = await importCsvData(csvContent)
+      const result = await importCsvBatch(csvContent, (completed, total) => {
+        const pct = Math.round((completed / total) * 100)
+        setProgressValue(pct)
+        setProgressLabel(`${completed} / ${total} chunks`)
+      })
       setImportResult(result)
-      toast.success('Importação concluída com sucesso!')
+      if (result.chunksFailed > 0) {
+        toast.warning(
+          `Importação concluída com ${result.chunksFailed} chunk(s) com falha de ${result.chunksTotal}.`,
+        )
+      } else {
+        toast.success('Importação concluída com sucesso!')
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao processar o CSV.'
       setImportError(msg)
@@ -172,46 +188,123 @@ export default function AdminTelemetriaImportacao() {
             )}
           </div>
 
+          {importing && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm text-slate-600">
+                <span>Processando em lotes...</span>
+                <span className="font-medium">{progressLabel}</span>
+              </div>
+              <Progress value={progressValue} className="h-2" />
+            </div>
+          )}
+
           {importResult && !importing && (
-            <Alert className="border-green-200 bg-green-50">
-              <CheckCircle2 className="w-4 h-4 text-green-600" />
+            <Alert
+              className={
+                importResult.chunksFailed > 0
+                  ? 'border-amber-200 bg-amber-50'
+                  : 'border-green-200 bg-green-50'
+              }
+            >
+              <CheckCircle2
+                className={
+                  importResult.chunksFailed > 0
+                    ? 'w-4 h-4 text-amber-600'
+                    : 'w-4 h-4 text-green-600'
+                }
+              />
               <AlertDescription>
                 <div className="space-y-2">
-                  <p className="font-semibold text-green-800">Importação concluída!</p>
+                  <p
+                    className={
+                      importResult.chunksFailed > 0
+                        ? 'font-semibold text-amber-800'
+                        : 'font-semibold text-green-800'
+                    }
+                  >
+                    Importação concluída! ({importResult.chunksSucceeded}/{importResult.chunksTotal}{' '}
+                    chunks processados com sucesso)
+                  </p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                     <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-green-600" />
-                      <span className="text-green-700">
-                        Total de linhas: <strong>{importResult.total_linhas}</strong>
+                      <TrendingUp
+                        className={
+                          importResult.chunksFailed > 0
+                            ? 'w-4 h-4 text-amber-600'
+                            : 'w-4 h-4 text-green-600'
+                        }
+                      />
+                      <span
+                        className={
+                          importResult.chunksFailed > 0 ? 'text-amber-700' : 'text-green-700'
+                        }
+                      >
+                        Total de linhas: <strong>{importResult.aggregated.total_linhas}</strong>
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-blue-500" />
-                      <span className="text-green-700">
-                        Eventos de direção: <strong>{importResult.eventos_direcao}</strong>
+                      <span
+                        className={
+                          importResult.chunksFailed > 0 ? 'text-amber-700' : 'text-green-700'
+                        }
+                      >
+                        Eventos de direção:{' '}
+                        <strong>{importResult.aggregated.eventos_direcao}</strong>
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-slate-400" />
-                      <span className="text-green-700">
-                        Eventos técnicos: <strong>{importResult.eventos_tecnicos}</strong>
+                      <span
+                        className={
+                          importResult.chunksFailed > 0 ? 'text-amber-700' : 'text-green-700'
+                        }
+                      >
+                        Eventos técnicos:{' '}
+                        <strong>{importResult.aggregated.eventos_tecnicos}</strong>
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-green-600" />
-                      <span className="text-green-700">
+                      <Users
+                        className={
+                          importResult.chunksFailed > 0
+                            ? 'w-4 h-4 text-amber-600'
+                            : 'w-4 h-4 text-green-600'
+                        }
+                      />
+                      <span
+                        className={
+                          importResult.chunksFailed > 0 ? 'text-amber-700' : 'text-green-700'
+                        }
+                      >
                         Motoristas encontrados:{' '}
-                        <strong>{importResult.motoristas_encontrados}</strong>
+                        <strong>{importResult.aggregated.motoristas_encontrados}</strong>
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-amber-500" />
-                      <span className="text-green-700">
+                      <span
+                        className={
+                          importResult.chunksFailed > 0 ? 'text-amber-700' : 'text-green-700'
+                        }
+                      >
                         Motoristas não encontrados:{' '}
-                        <strong>{importResult.motoristas_nao_encontrados}</strong>
+                        <strong>{importResult.aggregated.motoristas_nao_encontrados}</strong>
                       </span>
                     </div>
                   </div>
+                  {importResult.chunksFailed > 0 && (
+                    <div className="mt-3 space-y-1">
+                      <p className="font-semibold text-amber-800 text-xs">
+                        {importResult.chunksFailed} chunk(s) com falha:
+                      </p>
+                      {importResult.errors.map((err, idx) => (
+                        <p key={idx} className="text-xs text-amber-700">
+                          {err}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </AlertDescription>
             </Alert>
