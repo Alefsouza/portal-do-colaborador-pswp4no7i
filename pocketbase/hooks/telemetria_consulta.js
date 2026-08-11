@@ -9,20 +9,25 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     return e.json(401, { error: 'Token não fornecido.' })
   }
 
-  var userId = ''
   var jwtToken = authHeader.replace(/^Bearer\s+/i, '').trim()
+  var jwtPayload = null
   try {
-    var jwtPayload = $security.parseUnverifiedJWT(jwtToken)
-    if (jwtPayload && jwtPayload.id) {
-      if (!jwtPayload.exp || Date.now() < jwtPayload.exp * 1000) {
-        userId = jwtPayload.id
-      }
-    }
-  } catch (_) {}
-
-  if (!userId) {
+    jwtPayload = $security.parseUnverifiedJWT(jwtToken)
+  } catch (err) {
+    $app.logger().error('telemetria_consulta: failed to parse JWT', 'error', String(err))
     return e.json(401, { error: 'Sessão inválida.' })
   }
+
+  if (!jwtPayload || !jwtPayload.id) {
+    return e.json(401, { error: 'Sessão inválida.' })
+  }
+
+  if (jwtPayload.exp && Date.now() >= jwtPayload.exp * 1000) {
+    return e.json(401, { error: 'Sessão inválida.' })
+  }
+
+  var userId = jwtPayload.id
+  var userCpf = jwtPayload.cpf || ''
 
   var userNomeCompleto = ''
   try {
@@ -30,7 +35,62 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     if (usuarioRec) {
       userNomeCompleto = usuarioRec.getString('nome_completo') || ''
     }
-  } catch (_) {}
+  } catch (err) {
+    $app
+      .logger()
+      .error(
+        'telemetria_consulta: failed to find usuario by id',
+        'userId',
+        userId,
+        'error',
+        String(err),
+      )
+  }
+
+  if (!userNomeCompleto && userCpf) {
+    try {
+      var cpfRec = $app.findFirstRecordByData('usuarios', 'cpf', userCpf)
+      if (cpfRec) {
+        userNomeCompleto = cpfRec.getString('nome_completo') || ''
+      }
+    } catch (err) {
+      $app
+        .logger()
+        .error(
+          'telemetria_consulta: failed to find usuario by cpf',
+          'cpf',
+          userCpf,
+          'error',
+          String(err),
+        )
+    }
+  }
+
+  if (!userNomeCompleto) {
+    $app
+      .logger()
+      .warn(
+        'telemetria_consulta: no nome_completo found for user',
+        'userId',
+        userId,
+        'cpf',
+        userCpf,
+      )
+    return e.json(200, {
+      eventos_direcao: [],
+      eventos_tecnicos: [],
+      resumo: {
+        total_eventos: 0,
+        total_eventos_direcao: 0,
+        total_eventos_tecnicos: 0,
+        por_tipo: {},
+      },
+      metricas: {
+        distancia_total: '0.00',
+        velocidade_media: '0.0',
+      },
+    })
+  }
 
   var body = e.requestInfo().body || {}
   var data = (body.data || '').trim()
@@ -49,49 +109,55 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     return e.json(400, { error: 'Consulta disponível apenas para os últimos 30 dias.' })
   }
 
-  var filterBase = '(motorista_id = {:uid}'
-  var filterParams = { uid: userId, d: data, c: 'direcao' }
-  if (userNomeCompleto) {
-    filterBase += ' || motorista_nome = {:nome}'
-    filterParams.nome = userNomeCompleto
-  }
-  filterBase += ') && data = {:d} && classificacao = {:c}'
+  var filter = 'motorista_nome = {:nome} && data = {:d}'
+  var params = { nome: userNomeCompleto, d: data }
 
-  var drivingEvents = []
-  try {
-    drivingEvents = $app.findRecordsByFilter(
-      'telemetria_eventos',
-      filterBase,
-      '-data_hora',
-      1000,
-      0,
-      filterParams,
+  $app
+    .logger()
+    .info(
+      'telemetria_consulta: querying events',
+      'motorista_nome',
+      userNomeCompleto,
+      'filter',
+      filter,
+      'data',
+      data,
     )
-  } catch (_) {}
 
-  var technicalFilterParams = { uid: userId, d: data, c: 'tecnico' }
-  if (userNomeCompleto) {
-    technicalFilterParams.nome = userNomeCompleto
-  }
-  var technicalEvents = []
-  try {
-    technicalEvents = $app.findRecordsByFilter(
-      'telemetria_eventos',
-      filterBase,
-      '-data_hora',
-      1000,
-      0,
-      technicalFilterParams,
+  var allEvents = $app.findRecordsByFilter(
+    'telemetria_eventos',
+    filter,
+    '-data_hora',
+    1000,
+    0,
+    params,
+  )
+
+  $app
+    .logger()
+    .info(
+      'telemetria_consulta: records returned by filter',
+      'count',
+      allEvents.length,
+      'motorista_nome',
+      userNomeCompleto,
+      'data',
+      data,
     )
-  } catch (_) {}
 
   var seenIds = {}
+  var eventosDirecao = []
+  var eventosTecnicos = []
 
-  function buildEvent(rec) {
+  for (var i = 0; i < allEvents.length; i++) {
+    var rec = allEvents[i]
     var recId = rec.id
-    if (seenIds[recId]) return null
+    if (seenIds[recId]) continue
     seenIds[recId] = true
-    return {
+
+    var classificacao = (rec.getString('classificacao') || '').toLowerCase().trim()
+
+    var eventObj = {
       data: rec.getString('hora_inicio') || rec.getString('data_hora'),
       tipo: rec.getString('tipo_evento'),
       veiculo: rec.getString('frota_placa'),
@@ -100,35 +166,41 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
       distancia: rec.getString('distancia'),
       velocidade: rec.getString('velocidade'),
     }
+
+    if (classificacao === 'tecnico' || classificacao === 'técnico') {
+      eventosTecnicos.push(eventObj)
+    } else {
+      eventosDirecao.push(eventObj)
+    }
   }
 
-  var eventosDirecao = []
-  for (var i = 0; i < drivingEvents.length; i++) {
-    var ev = buildEvent(drivingEvents[i])
-    if (ev) eventosDirecao.push(ev)
-  }
-
-  var eventosTecnicos = []
-  for (var j = 0; j < technicalEvents.length; j++) {
-    var evT = buildEvent(technicalEvents[j])
-    if (evT) eventosTecnicos.push(evT)
-  }
+  $app
+    .logger()
+    .info(
+      'telemetria_consulta: deduplicated results',
+      'direcao',
+      eventosDirecao.length,
+      'tecnicos',
+      eventosTecnicos.length,
+      'motorista_nome',
+      userNomeCompleto,
+    )
 
   var porTipo = {}
   var distanciaTotal = 0
   var velocidadeSoma = 0
   var velocidadeCount = 0
-  var allEvents = eventosDirecao.concat(eventosTecnicos)
+  var combined = eventosDirecao.concat(eventosTecnicos)
 
-  for (var k = 0; k < allEvents.length; k++) {
-    var tipo = allEvents[k].tipo
+  for (var k = 0; k < combined.length; k++) {
+    var tipo = combined[k].tipo
     if (tipo) {
       if (!porTipo[tipo]) porTipo[tipo] = 0
       porTipo[tipo]++
     }
-    var dist = parseFloat(allEvents[k].distancia)
+    var dist = parseFloat(combined[k].distancia)
     if (!isNaN(dist)) distanciaTotal += dist
-    var vel = parseFloat(allEvents[k].velocidade)
+    var vel = parseFloat(combined[k].velocidade)
     if (!isNaN(vel)) {
       velocidadeSoma += vel
       velocidadeCount++
@@ -141,7 +213,7 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     eventos_direcao: eventosDirecao,
     eventos_tecnicos: eventosTecnicos,
     resumo: {
-      total_eventos: allEvents.length,
+      total_eventos: combined.length,
       total_eventos_direcao: eventosDirecao.length,
       total_eventos_tecnicos: eventosTecnicos.length,
       por_tipo: porTipo,
