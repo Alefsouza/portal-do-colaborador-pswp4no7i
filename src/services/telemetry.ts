@@ -28,6 +28,7 @@ export interface TelemetryRecord {
 
 export interface TelemetryQuery {
   data: string
+  nome_completo: string
 }
 
 const FALLBACK_MESSAGE = 'Não foi possível carregar os dados de telemetria. Tente novamente.'
@@ -36,7 +37,7 @@ export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRe
   try {
     const res = await pb.send('/backend/v1/telemetria/consulta', {
       method: 'POST',
-      body: { data: query.data },
+      body: { data: query.data, nome_completo: query.nome_completo },
     })
     return res as TelemetryRecord
   } catch (err) {

@@ -10,9 +10,8 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
   }
 
   var jwtToken = authHeader.replace(/^Bearer\s+/i, '').trim()
-  var jwtPayload = null
   try {
-    jwtPayload = $security.parseUnverifiedJWT(jwtToken)
+    var jwtPayload = $security.parseUnverifiedJWT(jwtToken)
   } catch (err) {
     $app.logger().error('telemetria_consulta: failed to parse JWT', 'error', String(err))
     return e.json(401, { error: 'Sessão inválida.' })
@@ -26,74 +25,14 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     return e.json(401, { error: 'Sessão inválida.' })
   }
 
-  var userId = jwtPayload.id
-  var userCpf = jwtPayload.cpf || ''
-
-  var userNomeCompleto = ''
-  try {
-    var usuarioRec = $app.findRecordById('usuarios', userId)
-    if (usuarioRec) {
-      userNomeCompleto = usuarioRec.getString('nome_completo') || ''
-    }
-  } catch (err) {
-    $app
-      .logger()
-      .error(
-        'telemetria_consulta: failed to find usuario by id',
-        'userId',
-        userId,
-        'error',
-        String(err),
-      )
-  }
-
-  if (!userNomeCompleto && userCpf) {
-    try {
-      var cpfRec = $app.findFirstRecordByData('usuarios', 'cpf', userCpf)
-      if (cpfRec) {
-        userNomeCompleto = cpfRec.getString('nome_completo') || ''
-      }
-    } catch (err) {
-      $app
-        .logger()
-        .error(
-          'telemetria_consulta: failed to find usuario by cpf',
-          'cpf',
-          userCpf,
-          'error',
-          String(err),
-        )
-    }
-  }
-
-  if (!userNomeCompleto) {
-    $app
-      .logger()
-      .warn(
-        'telemetria_consulta: no nome_completo found for user, returning empty result',
-        'userId',
-        userId,
-        'cpf',
-        userCpf,
-      )
-    return e.json(200, {
-      eventos_direcao: [],
-      eventos_tecnicos: [],
-      resumo: {
-        total_eventos: 0,
-        total_eventos_direcao: 0,
-        total_eventos_tecnicos: 0,
-        por_tipo: {},
-      },
-      metricas: {
-        distancia_total: '0.00',
-        velocidade_media: '0.0',
-      },
-    })
-  }
-
   var body = e.requestInfo().body || {}
+  var nomeCompleto = (body.nome_completo || '').trim()
   var data = (body.data || '').trim()
+
+  if (!nomeCompleto) {
+    return e.json(400, { error: 'Nome do colaborador não fornecido.' })
+  }
+
   if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) {
     return e.json(400, { error: 'Data inválida. Use o formato YYYY-MM-DD.' })
   }
@@ -109,15 +48,15 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     return e.json(400, { error: 'Consulta disponível apenas para os últimos 30 dias.' })
   }
 
-  var filter = 'motorista_nome LIKE {:nome} && data = {:d}'
-  var params = { nome: '%' + userNomeCompleto + '%', d: data }
+  var filter = 'motorista_nome ~ {:nome} && data = {:d}'
+  var params = { nome: nomeCompleto, d: data }
 
   $app
     .logger()
     .info(
       'telemetria_consulta: querying events',
       'motorista_nome',
-      userNomeCompleto,
+      nomeCompleto,
       'filter',
       filter,
       'data',
@@ -140,7 +79,7 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
       .error(
         'telemetria_consulta: query failed',
         'motorista_nome',
-        userNomeCompleto,
+        nomeCompleto,
         'filter',
         filter,
         'data',
@@ -158,7 +97,7 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
       'count',
       allEvents.length,
       'motorista_nome',
-      userNomeCompleto,
+      nomeCompleto,
       'data',
       data,
     )
@@ -201,7 +140,7 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
       'tecnicos',
       eventosTecnicos.length,
       'motorista_nome',
-      userNomeCompleto,
+      nomeCompleto,
     )
 
   var porTipo = {}
