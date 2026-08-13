@@ -39,6 +39,45 @@ export default function Telemetria() {
   }
 
   const totalEventos = useMemo(() => results?.resumo?.total_eventos ?? 0, [results])
+
+  const kmRodadoNum = useMemo(() => {
+    const kmRaw = results?.metricas_viagens?.km_rodado
+    if (kmRaw === undefined || kmRaw === null) return 0
+    const parsed = typeof kmRaw === 'number' ? kmRaw : parseFloat(String(kmRaw).replace(',', '.'))
+    return isNaN(parsed) ? 0 : parsed
+  }, [results])
+
+  const pontuacao = useMemo(() => {
+    if (totalEventos === 0) return 100
+    return Math.round(kmRodadoNum / totalEventos)
+  }, [kmRodadoNum, totalEventos])
+
+  const classificacao = useMemo(() => {
+    if (pontuacao >= 90) return 'Alto'
+    if (pontuacao >= 40) return 'Médio'
+    return 'Baixo'
+  }, [pontuacao])
+
+  const circleColorClass = useMemo(() => {
+    if (pontuacao >= 90) return 'bg-emerald-500 text-white'
+    if (pontuacao >= 40) return 'bg-amber-500 text-white'
+    return 'bg-red-500 text-white'
+  }, [pontuacao])
+
+  const kmFormatted = useMemo(() => {
+    if (kmRodadoNum === 0) return '0.0'
+    return kmRodadoNum.toLocaleString('pt-BR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 2,
+    })
+  }, [kmRodadoNum])
+
+  const direcaoDisplay = useMemo(() => {
+    const h = results?.metricas_viagens?.horas_dirigidas
+    if (!h || h === '0' || h === '0h 0m') return '-'
+    return h
+  }, [results])
+
   const allEvents = useMemo(() => {
     const driving = results?.eventos_direcao ?? []
     const technical = results?.eventos_tecnicos ?? []
@@ -185,51 +224,70 @@ export default function Telemetria() {
 
       {hasConsulted && !loading && !error && results && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="border-slate-200">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                  <Route className="w-6 h-6 text-green-600" />
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardContent className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+              {/* Lado Esquerdo - Pontuação Geral */}
+              <div className="flex items-center gap-4 min-w-0">
+                <div
+                  className={cn(
+                    'w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center font-bold text-2xl sm:text-3xl shrink-0 shadow-sm transition-colors',
+                    circleColorClass,
+                  )}
+                >
+                  {pontuacao}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm text-slate-500 font-medium">Quantidade de Viagens</p>
-                  <p className="text-2xl font-bold text-slate-900">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                    Pontuação Geral
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                    Classificação:{' '}
+                    <span className="font-semibold text-slate-800">{classificacao}</span>
+                  </p>
+                  <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                    {totalEventos}{' '}
+                    {totalEventos === 1 ? 'evento registrado' : 'eventos registrados'} nesta data
+                  </p>
+                </div>
+              </div>
+
+              {/* Lado Direito - Métricas */}
+              <div className="flex items-center justify-between sm:justify-end gap-6 sm:gap-8 pt-4 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                {/* Viagens */}
+                <div className="flex flex-col items-center text-center min-w-[64px]">
+                  <div className="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center">
+                    <Route className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <p className="text-base sm:text-lg font-bold text-slate-900 mt-2 leading-tight">
                     {results?.metricas_viagens?.quantidade_viagens ?? 0}
                   </p>
+                  <p className="text-xs text-slate-400 mt-0.5 font-medium">Viagens</p>
                 </div>
-              </CardContent>
-            </Card>
-            <Card className="border-slate-200">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                  <MapPin className="w-6 h-6 text-green-600" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm text-slate-500 font-medium">Km Rodado</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {Number(results?.metricas_viagens?.km_rodado ?? 0).toLocaleString('pt-BR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{' '}
-                    <span className="text-base font-semibold text-slate-400">km</span>
+
+                {/* km */}
+                <div className="flex flex-col items-center text-center min-w-[64px]">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-50 flex items-center justify-center">
+                    <MapPin className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <p className="text-base sm:text-lg font-bold text-slate-900 mt-2 leading-tight">
+                    {kmFormatted}
                   </p>
+                  <p className="text-xs text-slate-400 mt-0.5 font-medium">km</p>
                 </div>
-              </CardContent>
-            </Card>
-            <Card className="border-slate-200">
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                  <Clock className="w-6 h-6 text-green-600" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm text-slate-500 font-medium">Horas Dirigidas</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {results?.metricas_viagens?.horas_dirigidas ?? '0h 0m'}
+
+                {/* Direção */}
+                <div className="flex flex-col items-center text-center min-w-[64px]">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center">
+                    <Clock className="w-5 h-5 text-amber-500" />
+                  </div>
+                  <p className="text-base sm:text-lg font-bold text-slate-900 mt-2 leading-tight">
+                    {direcaoDisplay}
                   </p>
+                  <p className="text-xs text-slate-400 mt-0.5 font-medium">Direção</p>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
           {totalEventos === 0 ? (
             <Card className="border-slate-200">
               <CardContent className="py-12 text-center">
