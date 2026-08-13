@@ -9,6 +9,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import {
   listInformativosForUser,
   getAnexoUrl,
+  isImageFile,
   type Informativo,
 } from '@/services/admin-informativos'
 import { useAuth } from '@/hooks/use-auth'
@@ -102,6 +103,7 @@ export default function Newsletter() {
           {items.map((item) => {
             const pdfUrl = item.anexo ? getAnexoUrl(item) : ''
             const hasFailed = failedPdfs.has(item.id)
+            const isImage = item.anexo ? isImageFile(item.anexo) : false
 
             return (
               <Card key={item.id} className="border-slate-200 overflow-hidden">
@@ -137,21 +139,29 @@ export default function Newsletter() {
                   </div>
 
                   {pdfUrl && !hasFailed ? (
-                    <div className="w-full rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
-                      <object
-                        data={pdfUrl}
-                        type="application/pdf"
-                        className="w-full h-[600px]"
-                        onError={() => handlePdfError(item.id)}
-                      >
-                        <iframe
-                          src={pdfUrl}
-                          className="w-full h-[600px] border-0"
-                          title={item.titulo}
+                    isImage ? (
+                      <div className="w-full rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
+                        <img src={pdfUrl} alt={item.titulo} className="w-full h-auto block" />
+                      </div>
+                    ) : (
+                      <div className="w-full rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
+                        <object
+                          data={pdfUrl}
+                          type="application/pdf"
+                          className="w-full"
+                          style={{ height: 'calc(100vh - 200px)' }}
                           onError={() => handlePdfError(item.id)}
-                        />
-                      </object>
-                    </div>
+                        >
+                          <iframe
+                            src={pdfUrl}
+                            className="w-full border-0"
+                            style={{ height: 'calc(100vh - 200px)' }}
+                            title={item.titulo}
+                            onError={() => handlePdfError(item.id)}
+                          />
+                        </object>
+                      </div>
+                    )
                   ) : hasFailed ? (
                     <div className="flex flex-col items-center justify-center py-12 bg-slate-50 rounded-lg border border-slate-200">
                       <AlertCircle className="w-8 h-8 text-amber-500 mb-2" />

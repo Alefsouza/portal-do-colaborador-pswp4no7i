@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from 'react'
 import { Loader2, FileText, X, Upload } from 'lucide-react'
+import { toast } from 'sonner'
 import { format, parseISO } from 'date-fns'
 import {
   Dialog,
@@ -371,9 +372,4 @@ export function InformativoFormDialog({ open, onOpenChange, editingItem, onSaved
 async function getDistinctDepartamentosSafe(): Promise<string[]> {
   const { getDistinctDepartamentos } = await import('@/services/admin-usuarios')
   return getDistinctDepartamentos()
-}
-
-async function toast(msg: string) {
-  const { toast: sonnerToast } = await import('sonner')
-  sonnerToast(msg)
 }
