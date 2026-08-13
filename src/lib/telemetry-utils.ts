@@ -65,5 +65,6 @@ export function getEventBadgeClass(tipo: string): string {
   if (l.includes('celular')) return 'bg-purple-100 text-purple-700 border-purple-200'
   if (l.includes('curva') || l.includes('desconforto'))
     return 'bg-blue-100 text-blue-700 border-blue-200'
+  if (l.includes('desengrenado')) return 'bg-amber-100 text-amber-700 border-amber-200'
   return 'bg-slate-100 text-slate-700 border-slate-200'
 }

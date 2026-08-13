@@ -48,7 +48,17 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     return e.json(400, { error: 'Consulta disponível apenas para os últimos 30 dias.' })
   }
 
-  var filter = 'motorista_nome ~ {:nome} && data = {:d}'
+  // Filtrar apenas as 4 categorias de eventos de direção relevantes:
+  // Excesso de velocidade, Freada brusca, Veículo em movimento desengrenado
+  // e Curva brusca (à direita ou à esquerda, tratadas como um único grupo).
+  var filter =
+    'motorista_nome ~ {:nome} && data = {:d} && (' +
+    'categoria_evento = "Excesso de velocidade" || ' +
+    'categoria_evento = "Freada brusca" || ' +
+    'categoria_evento = "Veículo em movimento desengrenado" || ' +
+    'categoria_evento = "Curva brusca à direita" || ' +
+    'categoria_evento = "Curva brusca à esquerda"' +
+    ')'
   var params = { nome: nomeCompleto, d: data }
 
   $app
@@ -114,11 +124,22 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
 
     var classificacao = (rec.getString('classificacao') || '').toLowerCase().trim()
 
+    // Normalizar "Curva brusca à direita" e "Curva brusca à esquerda"
+    // para o grupo único "Curva Brusca".
+    var categoriaEvento = rec.getString('categoria_evento') || ''
+    var categoriaLower = categoriaEvento.toLowerCase()
+    if (
+      categoriaLower === 'curva brusca à direita' ||
+      categoriaLower === 'curva brusca à esquerda'
+    ) {
+      categoriaEvento = 'Curva Brusca'
+    }
+
     var eventObj = {
       data: rec.getString('hora_inicio') || rec.getString('data_hora'),
       tipo: rec.getString('tipo_evento'),
       veiculo: rec.getString('frota_placa'),
-      categoria: rec.getString('categoria_evento'),
+      categoria: categoriaEvento,
       duracao: rec.get('duracao') || 0,
       distancia: rec.getString('distancia'),
       velocidade: rec.getString('velocidade'),
