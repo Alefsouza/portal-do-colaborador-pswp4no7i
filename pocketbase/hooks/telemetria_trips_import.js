@@ -92,9 +92,12 @@ routerAdd('POST', '/backend/v1/telemetria/trips-import', (e) => {
     return (rowFields[idx] || '').trim()
   }
 
-  function extractDate(inicioViagem) {
-    if (!inicioViagem) return ''
-    var match = inicioViagem.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  function extractDate(dateStr) {
+    if (!dateStr) return ''
+    if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+      return dateStr.substring(0, 10)
+    }
+    var match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
     if (match) return match[3] + '-' + match[2] + '-' + match[1]
     return ''
   }
@@ -153,6 +156,7 @@ routerAdd('POST', '/backend/v1/telemetria/trips-import', (e) => {
     'end_lat',
     'end_long',
     'operacional',
+    'data_viagem',
   ]
 
   var headerToFieldMap = {
@@ -214,6 +218,8 @@ routerAdd('POST', '/backend/v1/telemetria/trips-import', (e) => {
     'end long': 'end_long',
     end_long: 'end_long',
     operacional: 'operacional',
+    'data viagem': 'data_viagem',
+    data_viagem: 'data_viagem',
   }
 
   for (var k = 0; k < dataLines.length; k++) {
@@ -221,6 +227,7 @@ routerAdd('POST', '/backend/v1/telemetria/trips-import', (e) => {
 
     var motoristaNome = ''
     var inicioViagemVal = ''
+    var fimViagemVal = ''
 
     var motoristaHeaderKeys = ['motorista', 'motorista_nome', 'driver', 'driver_name']
     for (var mk = 0; mk < motoristaHeaderKeys.length; mk++) {
@@ -240,7 +247,26 @@ routerAdd('POST', '/backend/v1/telemetria/trips-import', (e) => {
       }
     }
 
-    var dataViagem = extractDate(inicioViagemVal)
+    var fimHeaderKeys = ['fim da viagem', 'fim_viagem', 'end time', 'end_time']
+    for (var fk = 0; fk < fimHeaderKeys.length; fk++) {
+      var val3 = getField(rowFields, fimHeaderKeys[fk])
+      if (val3) {
+        fimViagemVal = val3
+        break
+      }
+    }
+
+    var dataViagemHeaderKeys = ['data viagem', 'data_viagem', 'data da viagem']
+    var dataViagemVal = ''
+    for (var dk = 0; dk < dataViagemHeaderKeys.length; dk++) {
+      var val4 = getField(rowFields, dataViagemHeaderKeys[dk])
+      if (val4) {
+        dataViagemVal = val4
+        break
+      }
+    }
+
+    var dataViagem = extractDate(dataViagemVal || fimViagemVal || inicioViagemVal)
 
     var motoristaId = ''
     var normalizedMotorista = normalizeName(motoristaNome)

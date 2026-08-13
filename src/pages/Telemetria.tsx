@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Loader2, Search, AlertCircle, Gauge, Info } from 'lucide-react'
+import { Loader2, Search, AlertCircle, Gauge, Info, Route, MapPin, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -185,6 +185,51 @@ export default function Telemetria() {
 
       {hasConsulted && !loading && !error && results && (
         <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="border-slate-200">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                  <Route className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-500 font-medium">Quantidade de Viagens</p>
+                  <p className="text-2xl font-bold text-slate-900">
+                    {results?.metricas_viagens?.quantidade_viagens ?? 0}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                  <MapPin className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-500 font-medium">Km Rodado</p>
+                  <p className="text-2xl font-bold text-slate-900">
+                    {Number(results?.metricas_viagens?.km_rodado ?? 0).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    <span className="text-base font-semibold text-slate-400">km</span>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-200">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                  <Clock className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-500 font-medium">Horas Dirigidas</p>
+                  <p className="text-2xl font-bold text-slate-900">
+                    {results?.metricas_viagens?.horas_dirigidas ?? '0h 0m'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
           {totalEventos === 0 ? (
             <Card className="border-slate-200">
               <CardContent className="py-12 text-center">

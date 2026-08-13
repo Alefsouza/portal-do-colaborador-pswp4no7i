@@ -24,6 +24,11 @@ export interface TelemetryRecord {
     distancia_total: string
     velocidade_media: string
   }
+  metricas_viagens: {
+    quantidade_viagens: number
+    km_rodado: string
+    horas_dirigidas: string
+  }
 }
 
 export interface TelemetryQuery {

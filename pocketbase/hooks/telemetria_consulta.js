@@ -166,6 +166,59 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
 
   var velocidadeMedia = velocidadeCount > 0 ? velocidadeSoma / velocidadeCount : 0
 
+  var tripsFilter = 'motorista_nome ~ {:nome} && data_viagem = {:d}'
+  var trips = []
+  try {
+    trips = $app.findRecordsByFilter('telemetria_trips', tripsFilter, '-created', 1000, 0, params)
+  } catch (err) {
+    $app
+      .logger()
+      .error(
+        'telemetria_consulta: trips query failed',
+        'motorista_nome',
+        nomeCompleto,
+        'data',
+        data,
+        'error',
+        String(err),
+      )
+  }
+
+  var totalTrips = trips.length
+  var totalKm = 0
+  var totalSeconds = 0
+
+  for (var t = 0; t < trips.length; t++) {
+    var distStr = (trips[t].getString('km_final') || '').replace(',', '.')
+    var distVal = parseFloat(distStr)
+    if (!isNaN(distVal)) totalKm += distVal
+
+    var tempoStr = trips[t].getString('tempo_total') || ''
+    if (tempoStr.indexOf(':') !== -1) {
+      var tParts = tempoStr.split(':')
+      if (tParts.length === 3) {
+        totalSeconds += (parseInt(tParts[0], 10) || 0) * 3600
+        totalSeconds += (parseInt(tParts[1], 10) || 0) * 60
+        totalSeconds += parseInt(tParts[2], 10) || 0
+      } else if (tParts.length === 2) {
+        totalSeconds += (parseInt(tParts[0], 10) || 0) * 60
+        totalSeconds += parseInt(tParts[1], 10) || 0
+      }
+    } else {
+      var secVal = parseFloat(tempoStr.replace(',', '.'))
+      if (!isNaN(secVal)) totalSeconds += secVal
+    }
+  }
+
+  var totalHours = totalSeconds / 3600
+  var horasInt = Math.floor(totalHours)
+  var minutosInt = Math.round((totalHours - horasInt) * 60)
+  if (minutosInt === 60) {
+    horasInt += 1
+    minutosInt = 0
+  }
+  var horasFormatadas = horasInt + 'h ' + minutosInt + 'm'
+
   return e.json(200, {
     eventos_direcao: eventosDirecao,
     eventos_tecnicos: eventosTecnicos,
@@ -178,6 +231,11 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
     metricas: {
       distancia_total: distanciaTotal.toFixed(2),
       velocidade_media: velocidadeMedia.toFixed(1),
+    },
+    metricas_viagens: {
+      quantidade_viagens: totalTrips,
+      km_rodado: totalKm.toFixed(2),
+      horas_dirigidas: horasFormatadas,
     },
   })
 })
