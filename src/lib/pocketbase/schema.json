@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T14:50:54.021Z",
+  "generatedAt": "2026-08-13T15:13:48.846Z",
   "collections": [
     {
       "name": "users",
@@ -529,80 +529,8 @@
       },
       "fields": [
         {
-          "name": "trip_id",
-          "type": "number",
-          "required": true,
-          "system": false
-        },
-        {
-          "name": "worker_id",
-          "type": "number",
-          "required": true,
-          "system": false
-        },
-        {
-          "name": "driver_name",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "data",
-          "type": "text",
-          "required": true,
-          "system": false
-        },
-        {
-          "name": "asset_id",
-          "type": "number",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "mileage",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "fuel_used",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "drive_duration",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "line_name",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "start_time",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "end_time",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
           "name": "raw_data",
           "type": "json",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "sincronizado_em",
-          "type": "text",
           "required": false,
           "system": false
         },
@@ -619,11 +547,222 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "drive_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_veiculo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_veiculo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "motorista_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "senha_motorista",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "grupo_motorista",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cpf_matricula",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inicio_viagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fim_viagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "destino",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "distancia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tempo_total",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "horimetro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "combustivel_utilizado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "km_por_litro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "litros_por_100km",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "idle_time",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "idle_time_minutos",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "km_final",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tempo_motor",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "doa_distance",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "doa_time",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "doa_distance_percent",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "doa_time_percent",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "co2",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "time_from_prev_drive",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "start_lat",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "start_long",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "end_lat",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "end_long",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "operacional",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_viagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "processado_em",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "motorista_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "usuarios"
         }
       ],
       "indexes": [
-        "CREATE INDEX idx_telemetria_trips_worker_data ON telemetria_trips (worker_id, data)",
-        "CREATE UNIQUE INDEX idx_telemetria_trips_trip_worker ON telemetria_trips (trip_id, worker_id)"
+        "CREATE INDEX `idx_telemetria_trips_motorista` ON `telemetria_trips` (motorista_id)",
+        "CREATE INDEX `idx_telemetria_trips_data_viagem` ON `telemetria_trips` (data_viagem)"
       ]
     },
     {

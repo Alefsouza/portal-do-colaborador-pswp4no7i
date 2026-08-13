@@ -35,6 +35,185 @@ export async function importCsvData(csvContent: string): Promise<CsvImportResult
   return result.aggregated
 }
 
+export interface TripsImportResult {
+  total_linhas: number
+  trips_encontrados: number
+  motoristas_encontrados: number
+  motoristas_nao_encontrados: number
+}
+
+export async function importTripsCsv(csvContent: string): Promise<TripsImportResult> {
+  const token = getAdminToken()
+  if (!token) throw new Error('Sessão expirada. Faça login novamente.')
+
+  let text = csvContent
+  if (text.charCodeAt(0) === 0xfeff) text = text.substring(1)
+
+  const allLines = text.split('\n')
+  if (allLines.length < 2) {
+    throw new Error('CSV sem dados.')
+  }
+
+  const dataLines = allLines.slice(1).filter((l) => l.trim() !== '')
+  if (dataLines.length === 0) {
+    throw new Error('CSV sem dados.')
+  }
+
+  const chunkSize = 200
+  const header = allLines[0]
+  const chunks: string[] = []
+  for (let i = 0; i < dataLines.length; i += chunkSize) {
+    const slice = dataLines.slice(i, i + chunkSize)
+    chunks.push(header + '\n' + slice.join('\n'))
+  }
+
+  const aggregated: TripsImportResult = {
+    total_linhas: 0,
+    trips_encontrados: 0,
+    motoristas_encontrados: 0,
+    motoristas_nao_encontrados: 0,
+  }
+
+  let chunksSucceeded = 0
+  let chunksFailed = 0
+  const errors: string[] = []
+
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      const res = await fetch(`${PB_URL}/backend/v1/telemetria/trips-import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ csv: chunks[i] }),
+      })
+
+      let data: Record<string, unknown>
+      try {
+        data = await res.json()
+      } catch {
+        throw new Error(`Erro ${res.status}`)
+      }
+
+      if (!res.ok) {
+        throw new Error((data.error as string) || `Erro ${res.status}`)
+      }
+
+      const chunkResult = data as unknown as TripsImportResult
+      aggregated.total_linhas += chunkResult.total_linhas || 0
+      aggregated.trips_encontrados += chunkResult.trips_encontrados || 0
+      aggregated.motoristas_encontrados += chunkResult.motoristas_encontrados || 0
+      aggregated.motoristas_nao_encontrados += chunkResult.motoristas_nao_encontrados || 0
+      chunksSucceeded++
+    } catch (err) {
+      const friendlyErr = friendlyNetworkError(err)
+      chunksFailed++
+      errors.push(`Chunk ${i + 1}/${chunks.length}: ${friendlyErr.message}`)
+    }
+  }
+
+  if (chunksFailed > 0 && chunksSucceeded === 0) {
+    throw new Error(errors[0] || 'Erro ao processar o CSV de Trips.')
+  }
+
+  return aggregated
+}
+
+export interface BatchTripsImportResult {
+  aggregated: TripsImportResult
+  chunksTotal: number
+  chunksSucceeded: number
+  chunksFailed: number
+  errors: string[]
+}
+
+export async function importTripsCsvBatch(
+  csvContent: string,
+  onProgress: (completed: number, total: number) => void,
+  chunkSize = 200,
+): Promise<BatchTripsImportResult> {
+  const token = getAdminToken()
+  if (!token) throw new Error('Sessão expirada. Faça login novamente.')
+
+  let text = csvContent
+  if (text.charCodeAt(0) === 0xfeff) text = text.substring(1)
+
+  const allLines = text.split('\n')
+  if (allLines.length < 2) {
+    throw new Error('CSV sem dados.')
+  }
+
+  const header = allLines[0]
+  const dataLines = allLines.slice(1).filter((l) => l.trim() !== '')
+
+  if (dataLines.length === 0) {
+    throw new Error('CSV sem dados.')
+  }
+
+  const chunks: string[] = []
+  for (let i = 0; i < dataLines.length; i += chunkSize) {
+    const slice = dataLines.slice(i, i + chunkSize)
+    chunks.push(header + '\n' + slice.join('\n'))
+  }
+
+  const aggregated: TripsImportResult = {
+    total_linhas: 0,
+    trips_encontrados: 0,
+    motoristas_encontrados: 0,
+    motoristas_nao_encontrados: 0,
+  }
+
+  let chunksSucceeded = 0
+  let chunksFailed = 0
+  const errors: string[] = []
+
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      const res = await fetch(`${PB_URL}/backend/v1/telemetria/trips-import`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ csv: chunks[i] }),
+      })
+
+      let data: Record<string, unknown>
+      try {
+        data = await res.json()
+      } catch {
+        throw new Error(`Erro ${res.status}`)
+      }
+
+      if (!res.ok) {
+        throw new Error((data.error as string) || `Erro ${res.status}`)
+      }
+
+      const chunkResult = data as unknown as TripsImportResult
+      aggregated.total_linhas += chunkResult.total_linhas || 0
+      aggregated.trips_encontrados += chunkResult.trips_encontrados || 0
+      aggregated.motoristas_encontrados += chunkResult.motoristas_encontrados || 0
+      aggregated.motoristas_nao_encontrados += chunkResult.motoristas_nao_encontrados || 0
+      chunksSucceeded++
+    } catch (err) {
+      const friendlyErr = friendlyNetworkError(err)
+      chunksFailed++
+      errors.push(`Chunk ${i + 1}/${chunks.length}: ${friendlyErr.message}`)
+    }
+
+    onProgress(i + 1, chunks.length)
+  }
+
+  return {
+    aggregated,
+    chunksTotal: chunks.length,
+    chunksSucceeded,
+    chunksFailed,
+    errors,
+  }
+}
+
 export interface BatchImportResult {
   aggregated: CsvImportResult
   chunksTotal: number
