@@ -188,11 +188,79 @@ routerAdd('POST', '/backend/v1/telemetria/consulta', (e) => {
   var totalKm = 0
   var totalSeconds = 0
 
-  for (var t = 0; t < trips.length; t++) {
-    var distStr = (trips[t].getString('km_final') || '').replace(',', '.')
-    var distVal = parseFloat(distStr)
-    if (!isNaN(distVal)) totalKm += distVal
+  function parseKmFinal(rec) {
+    var s = (rec.getString('km_final') || '').replace(',', '.').trim()
+    var v = parseFloat(s)
+    return isNaN(v) ? null : v
+  }
 
+  function parseInicioDate(rec) {
+    var s = (rec.getString('inicio_viagem') || '').trim()
+    if (!s) {
+      // inicio_viagem vazio: usar fim_viagem como fallback para manter a ordem cronológica
+      s = (rec.getString('fim_viagem') || '').trim()
+    }
+    if (!s) return new Date(0)
+    var d = new Date(s.replace(' ', 'T'))
+    return isNaN(d.getTime()) ? new Date(0) : d
+  }
+
+  // Ordenar viagens do dia por ordem cronológica de início
+  var dayTrips = trips.slice().sort(function (a, b) {
+    var da = parseInicioDate(a).getTime()
+    var db = parseInicioDate(b).getTime()
+    return da - db
+  })
+
+  if (dayTrips.length >= 2) {
+    // 2+ viagens no dia: km_final da última - km_final da primeira
+    var firstKm = parseKmFinal(dayTrips[0])
+    var lastKm = parseKmFinal(dayTrips[dayTrips.length - 1])
+    if (firstKm !== null && lastKm !== null) {
+      totalKm = lastKm - firstKm
+      if (totalKm < 0) totalKm = 0
+    }
+  } else if (dayTrips.length === 1) {
+    // 1 viagem no dia: buscar a última viagem anterior do mesmo numero_veiculo
+    var numeroVeiculo = (dayTrips[0].getString('numero_veiculo') || '').trim()
+    var dayKm = parseKmFinal(dayTrips[0])
+    if (numeroVeiculo && dayKm !== null) {
+      var prevTrips = []
+      try {
+        var prevFilter = 'numero_veiculo = {:v} && data_viagem < {:d}'
+        var prevParams = { v: numeroVeiculo, d: data }
+        prevTrips = $app.findRecordsByFilter(
+          'telemetria_trips',
+          prevFilter,
+          '-data_viagem,-inicio_viagem',
+          1,
+          0,
+          prevParams,
+        )
+      } catch (err) {
+        $app
+          .logger()
+          .error(
+            'telemetria_consulta: previous trip query failed',
+            'numero_veiculo',
+            numeroVeiculo,
+            'data',
+            data,
+            'error',
+            String(err),
+          )
+      }
+      if (prevTrips.length > 0) {
+        var prevKm = parseKmFinal(prevTrips[0])
+        if (prevKm !== null) {
+          totalKm = dayKm - prevKm
+          if (totalKm < 0) totalKm = 0
+        }
+      }
+    }
+  }
+
+  for (var t = 0; t < trips.length; t++) {
     var tempoStr = trips[t].getString('tempo_total') || ''
     if (tempoStr.indexOf(':') !== -1) {
       var tParts = tempoStr.split(':')
