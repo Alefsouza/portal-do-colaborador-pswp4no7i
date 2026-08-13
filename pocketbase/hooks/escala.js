@@ -37,87 +37,133 @@ routerAdd('GET', '/backend/v1/escala', (e) => {
 
   const dataParam = (e.requestInfo().query && e.requestInfo().query.data) || ''
 
-  const escalaUrl = $secrets.get('RECIBO_VIEW') || ''
-  if (!escalaUrl) {
-    return e.json(502, { error: 'URL da escala não configurada.' })
+  var CACHE_TTL_MS = 5 * 60 * 1000
+  var now = Date.now()
+  var allItems = null
+
+  var cacheRecord = null
+  try {
+    cacheRecord = $app.findFirstRecordByFilter('escala_cache', "id != ''")
+  } catch (_) {}
+
+  if (cacheRecord) {
+    var fetchedAtStr = cacheRecord.getString('fetched_at')
+    var fetchedAt = parseInt(fetchedAtStr, 10)
+    if (!isNaN(fetchedAt) && now - fetchedAt < CACHE_TTL_MS) {
+      var cachedDataStr = cacheRecord.getString('data')
+      if (cachedDataStr) {
+        try {
+          var parsed = JSON.parse(cachedDataStr)
+          if (Array.isArray(parsed)) {
+            allItems = parsed
+          }
+        } catch (_) {
+          allItems = null
+        }
+      }
+    }
   }
 
-  function fetchPage(url) {
-    var res
+  if (allItems === null) {
+    var escalaUrl = $secrets.get('RECIBO_VIEW') || ''
+    if (!escalaUrl) {
+      return e.json(502, { error: 'URL da escala não configurada.' })
+    }
+
+    function fetchPage(url) {
+      var res
+      try {
+        res = $http.send({
+          url: url,
+          method: 'GET',
+          timeout: 30,
+        })
+      } catch (err) {
+        $app.logger().error('Escala fetch transport error', 'message', err.message)
+        return null
+      }
+      if (res.statusCode !== 200) {
+        $app.logger().error('Escala fetch failed', 'statusCode', res.statusCode)
+        return null
+      }
+      try {
+        return res.json
+      } catch (_) {
+        return null
+      }
+    }
+
+    var firstData = fetchPage(escalaUrl)
+    if (firstData === null) {
+      return e.json(502, { error: 'Falha ao buscar dados da escala.' })
+    }
+
+    allItems = []
+
+    function extractItems(data) {
+      if (Array.isArray(data)) {
+        return data
+      }
+      if (data && Array.isArray(data.items)) {
+        return data.items
+      }
+      if (data && Array.isArray(data.data)) {
+        return data.data
+      }
+      if (data && Array.isArray(data.results)) {
+        return data.results
+      }
+      if (data && typeof data === 'object') {
+        return [data]
+      }
+      return []
+    }
+
+    function hasPagination(data) {
+      if (!data || typeof data !== 'object') return false
+      if (Array.isArray(data)) return false
+      if (data.next && typeof data.next === 'string') return true
+      if (data.page != null && data.pages != null && data.pages > 1) return true
+      if (data.total_pages != null && data.total_pages > 1) return true
+      if (data.last_page != null && data.last_page > 1) return true
+      return false
+    }
+
+    function getNextUrl(data) {
+      if (!data || typeof data !== 'object') return ''
+      if (data.next && typeof data.next === 'string') return data.next
+      return ''
+    }
+
+    allItems = allItems.concat(extractItems(firstData))
+
+    if (hasPagination(firstData)) {
+      var nextUrl = getNextUrl(firstData)
+      var safetyCounter = 0
+      while (nextUrl && safetyCounter < 500) {
+        safetyCounter++
+        var pageData = fetchPage(nextUrl)
+        if (pageData === null) break
+        allItems = allItems.concat(extractItems(pageData))
+        nextUrl = getNextUrl(pageData)
+      }
+    }
+
     try {
-      res = $http.send({
-        url: url,
-        method: 'GET',
-        timeout: 30,
-      })
-    } catch (err) {
-      $app.logger().error('Escala fetch transport error', 'message', err.message)
-      return null
-    }
-    if (res.statusCode !== 200) {
-      $app.logger().error('Escala fetch failed', 'statusCode', res.statusCode)
-      return null
-    }
-    try {
-      return res.json
-    } catch (_) {
-      return null
-    }
-  }
-
-  var firstData = fetchPage(escalaUrl)
-  if (firstData === null) {
-    return e.json(502, { error: 'Falha ao buscar dados da escala.' })
-  }
-
-  var allItems = []
-
-  function extractItems(data) {
-    if (Array.isArray(data)) {
-      return data
-    }
-    if (data && Array.isArray(data.items)) {
-      return data.items
-    }
-    if (data && Array.isArray(data.data)) {
-      return data.data
-    }
-    if (data && Array.isArray(data.results)) {
-      return data.results
-    }
-    if (data && typeof data === 'object') {
-      return [data]
-    }
-    return []
-  }
-
-  function hasPagination(data) {
-    if (!data || typeof data !== 'object') return false
-    if (Array.isArray(data)) return false
-    if (data.next && typeof data.next === 'string') return true
-    if (data.page != null && data.pages != null && data.pages > 1) return true
-    if (data.total_pages != null && data.total_pages > 1) return true
-    if (data.last_page != null && data.last_page > 1) return true
-    return false
-  }
-
-  function getNextUrl(data) {
-    if (!data || typeof data !== 'object') return ''
-    if (data.next && typeof data.next === 'string') return data.next
-    return ''
-  }
-
-  allItems = allItems.concat(extractItems(firstData))
-
-  if (hasPagination(firstData)) {
-    var nextUrl = getNextUrl(firstData)
-    var safetyCounter = 0
-    while (nextUrl && safetyCounter < 500) {
-      safetyCounter++
-      var pageData = fetchPage(nextUrl)
-      if (pageData === null) break
-      allItems = allItems.concat(extractItems(pageData))
-      nextUrl = getNextUrl(pageData)
+      var cacheCol = $app.findCollectionByNameOrId('escala_cache')
+      var dataStr = JSON.stringify(allItems)
+      if (cacheRecord) {
+        cacheRecord.set('data', dataStr)
+        cacheRecord.set('fetched_at', String(now))
+        $app.saveNoValidate(cacheRecord)
+      } else {
+        var newRecord = new Record(cacheCol)
+        newRecord.set('data', dataStr)
+        newRecord.set('fetched_at', String(now))
+        $app.saveNoValidate(newRecord)
+      }
+    } catch (cacheErr) {
+      $app.logger().error('Failed to save escala cache', 'message', String(cacheErr))
     }
   }
 

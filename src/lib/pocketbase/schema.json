@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T14:38:33.676Z",
+  "generatedAt": "2026-08-13T14:50:54.021Z",
   "collections": [
     {
       "name": "users",
@@ -1016,6 +1016,46 @@
         "CREATE INDEX idx_solicitacao_mensagens_solicitacao ON solicitacao_mensagens (id_solicitacao)",
         "CREATE INDEX idx_solicitacao_mensagens_usuario ON solicitacao_mensagens (id_usuario)"
       ]
+    },
+    {
+      "name": "escala_cache",
+      "type": "base",
+      "apiRules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "data",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fetched_at",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": []
     }
   ]
 }
