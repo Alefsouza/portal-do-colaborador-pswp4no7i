@@ -42,35 +42,83 @@ routerAdd('GET', '/backend/v1/escala', (e) => {
     return e.json(502, { error: 'URL da escala não configurada.' })
   }
 
-  let res
-  try {
-    res = $http.send({
-      url: escalaUrl,
-      method: 'GET',
-      timeout: 30,
-    })
-  } catch (err) {
-    $app.logger().error('Escala fetch transport error', 'message', err.message)
+  function fetchPage(url) {
+    var res
+    try {
+      res = $http.send({
+        url: url,
+        method: 'GET',
+        timeout: 30,
+      })
+    } catch (err) {
+      $app.logger().error('Escala fetch transport error', 'message', err.message)
+      return null
+    }
+    if (res.statusCode !== 200) {
+      $app.logger().error('Escala fetch failed', 'statusCode', res.statusCode)
+      return null
+    }
+    try {
+      return res.json
+    } catch (_) {
+      return null
+    }
+  }
+
+  var firstData = fetchPage(escalaUrl)
+  if (firstData === null) {
     return e.json(502, { error: 'Falha ao buscar dados da escala.' })
   }
 
-  if (res.statusCode !== 200) {
-    $app.logger().error('Escala fetch failed', 'statusCode', res.statusCode)
-    return e.json(502, { error: 'Falha ao buscar dados da escala.' })
+  var allItems = []
+
+  function extractItems(data) {
+    if (Array.isArray(data)) {
+      return data
+    }
+    if (data && Array.isArray(data.items)) {
+      return data.items
+    }
+    if (data && Array.isArray(data.data)) {
+      return data.data
+    }
+    if (data && Array.isArray(data.results)) {
+      return data.results
+    }
+    if (data && typeof data === 'object') {
+      return [data]
+    }
+    return []
   }
 
-  let data
-  try {
-    data = res.json
-  } catch (_) {
-    return e.json(502, { error: 'Dados da escala em formato inválido.' })
+  function hasPagination(data) {
+    if (!data || typeof data !== 'object') return false
+    if (Array.isArray(data)) return false
+    if (data.next && typeof data.next === 'string') return true
+    if (data.page != null && data.pages != null && data.pages > 1) return true
+    if (data.total_pages != null && data.total_pages > 1) return true
+    if (data.last_page != null && data.last_page > 1) return true
+    return false
   }
 
-  let items = []
-  if (data && Array.isArray(data.items)) {
-    items = data.items
-  } else if (Array.isArray(data)) {
-    items = data
+  function getNextUrl(data) {
+    if (!data || typeof data !== 'object') return ''
+    if (data.next && typeof data.next === 'string') return data.next
+    return ''
+  }
+
+  allItems = allItems.concat(extractItems(firstData))
+
+  if (hasPagination(firstData)) {
+    var nextUrl = getNextUrl(firstData)
+    var safetyCounter = 0
+    while (nextUrl && safetyCounter < 500) {
+      safetyCounter++
+      var pageData = fetchPage(nextUrl)
+      if (pageData === null) break
+      allItems = allItems.concat(extractItems(pageData))
+      nextUrl = getNextUrl(pageData)
+    }
   }
 
   function convertDate(dateStr) {
@@ -83,8 +131,8 @@ routerAdd('GET', '/backend/v1/escala', (e) => {
   }
 
   var filtered = []
-  for (var i = 0; i < items.length; i++) {
-    var item = items[i]
+  for (var i = 0; i < allItems.length; i++) {
+    var item = allItems[i]
     if (String(item.registro || '') === String(registro)) {
       var convertedData = convertDate(item.data)
       if (dataParam && convertedData !== dataParam) {
