@@ -52,6 +52,7 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
 
   function getNextUrl(data) {
     if (!data || typeof data !== 'object') return ''
+    var nextUrl = ''
     if (Array.isArray(data.links)) {
       for (var i = 0; i < data.links.length; i++) {
         if (
@@ -60,12 +61,18 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
           typeof data.links[i].href === 'string' &&
           data.links[i].href
         ) {
-          return data.links[i].href
+          nextUrl = data.links[i].href
+          break
         }
       }
     }
-    if (data.next && typeof data.next === 'string') return data.next
-    return ''
+    if (!nextUrl && data.next && typeof data.next === 'string') {
+      nextUrl = data.next
+    }
+    if (nextUrl && nextUrl.startsWith('http://')) {
+      nextUrl = 'https://' + nextUrl.slice(7)
+    }
+    return nextUrl
   }
 
   function maskUrl(rawUrl) {
@@ -282,7 +289,7 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
     var convertedData = convertDate(rawData)
     var veic = item.prefixo != null ? String(item.prefixo).trim() : ''
 
-    if (!reg || !convertedData) {
+    if (!reg || !convertedData || !veic) {
       continue
     }
 
