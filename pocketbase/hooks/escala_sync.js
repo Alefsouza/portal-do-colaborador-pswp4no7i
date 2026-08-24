@@ -35,6 +35,14 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
   function hasPagination(data) {
     if (!data || typeof data !== 'object') return false
     if (Array.isArray(data)) return false
+    if (data.hasMore === true) return true
+    if (Array.isArray(data.links)) {
+      for (var i = 0; i < data.links.length; i++) {
+        if (data.links[i] && data.links[i].rel === 'next' && data.links[i].href) {
+          return true
+        }
+      }
+    }
     if (data.next && typeof data.next === 'string') return true
     if (data.page != null && data.pages != null && data.pages > 1) return true
     if (data.total_pages != null && data.total_pages > 1) return true
@@ -44,6 +52,18 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
 
   function getNextUrl(data) {
     if (!data || typeof data !== 'object') return ''
+    if (Array.isArray(data.links)) {
+      for (var i = 0; i < data.links.length; i++) {
+        if (
+          data.links[i] &&
+          data.links[i].rel === 'next' &&
+          typeof data.links[i].href === 'string' &&
+          data.links[i].href
+        ) {
+          return data.links[i].href
+        }
+      }
+    }
     if (data.next && typeof data.next === 'string') return data.next
     return ''
   }
