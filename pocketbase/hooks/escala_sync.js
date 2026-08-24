@@ -3,6 +3,11 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
     if (!dateStr || typeof dateStr !== 'string') return ''
     var parts = dateStr.split('-')
     if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        // Already YYYY-MM-DD
+        return dateStr
+      }
+      // DD-MM-YYYY -> YYYY-MM-DD
       return parts[2] + '-' + parts[1] + '-' + parts[0]
     }
     return dateStr
