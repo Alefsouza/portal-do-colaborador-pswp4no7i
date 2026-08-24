@@ -1,5 +1,6 @@
 // Importacao de telemetria (trips) em lotes (chunks) para contornar o
 // limite de tamanho de upload.
+// Redeploy: forcar recarga/registro da rota pelo PocketBase.
 //
 // Contrato do chunk: cada lote (incluindo o chunk_index 0) deve conter a
 // linha de cabecalho do CSV como primeira linha, seguida de ate ~500 linhas
