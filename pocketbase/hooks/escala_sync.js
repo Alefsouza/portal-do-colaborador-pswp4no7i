@@ -78,7 +78,7 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
   function fetchPage(url, isFirstPage, pageNum) {
     var pageLabel = pageNum ? 'page ' + pageNum : isFirstPage ? 'first page' : 'page'
     var masked = maskUrl(url)
-    var timeoutSec = isFirstPage ? 60 : 30
+    var timeoutSec = isFirstPage ? 120 : 60
     console.log(
       'Escala sync: fetching ' + pageLabel + ' (' + masked + ') [timeout=' + timeoutSec + 's]',
     )
@@ -90,14 +90,30 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
         url: url,
         method: 'GET',
         headers: {
-          Accept: 'application/json',
-          'User-Agent': 'SkipCloud-EscalaSync/1.0',
+          Accept: 'application/json, text/plain, */*',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         },
         timeout: timeoutSec,
       })
     } catch (err) {
       var errMsg = err && err.message ? err.message : String(err)
-      console.log('Escala sync fetch transport error on ' + pageLabel + ': ' + errMsg)
+      var errStack = err && err.stack ? err.stack : ''
+      var errObjStr = ''
+      try {
+        errObjStr = JSON.stringify(err)
+      } catch (_) {}
+      console.log(
+        'Escala sync fetch transport error on ' +
+          pageLabel +
+          ': ' +
+          errMsg +
+          (errStack ? ' | stack: ' + errStack : '') +
+          (errObjStr && errObjStr !== '{}' ? ' | details: ' + errObjStr : ''),
+      )
       $app
         .logger()
         .error(
@@ -106,6 +122,10 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
           pageLabel,
           'message',
           errMsg,
+          'stack',
+          errStack,
+          'details',
+          errObjStr,
           'url',
           masked,
         )
