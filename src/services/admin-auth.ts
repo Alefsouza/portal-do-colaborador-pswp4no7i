@@ -8,6 +8,7 @@ export interface AdminUser {
   perfil: string
   departamento: string
   primeiro_acesso: boolean
+  avatar?: string
 }
 
 export interface AdminLoginResponse {

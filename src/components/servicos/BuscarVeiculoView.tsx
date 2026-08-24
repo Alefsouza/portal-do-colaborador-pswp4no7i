@@ -26,7 +26,7 @@ interface BuscarVeiculoViewProps {
 
 declare global {
   interface Window {
-    L: typeof import('leaflet')
+    L: any
   }
 }
 

@@ -36,6 +36,55 @@ export interface TelemetryQuery {
   nome_completo: string
 }
 
+export interface SyncStatus {
+  date: string
+  total_pages: number
+  pages_processed: number[]
+  status: string
+  updated_at: string
+}
+
+export async function getSyncStatus(date: string): Promise<SyncStatus | null> {
+  try {
+    const records = await pb.collection('datalbus_sync_status').getFullList({
+      filter: `date = "${date}"`,
+    })
+    return (records[0] as unknown as SyncStatus) || null
+  } catch {
+    return null
+  }
+}
+
+export async function syncInit(date: string): Promise<{ total_pages: number }> {
+  const res = await pb.send('/backend/v1/telemetria/sync-init', {
+    method: 'POST',
+    body: { date },
+  })
+  return res as { total_pages: number }
+}
+
+export async function syncChunk(
+  date: string,
+  page: number,
+  limit?: number,
+): Promise<{ next_page: number; has_more: boolean }> {
+  const res = await pb.send('/backend/v1/telemetria/sync-chunk', {
+    method: 'POST',
+    body: { date, page, limit },
+  })
+  return res as { next_page: number; has_more: boolean }
+}
+
+export async function syncEvents(
+  date: string,
+): Promise<{ eventos_processados: number; trips_restantes: number; completo: boolean }> {
+  const res = await pb.send('/backend/v1/telemetria/sync-events', {
+    method: 'POST',
+    body: { date },
+  })
+  return res as { eventos_processados: number; trips_restantes: number; completo: boolean }
+}
+
 const FALLBACK_MESSAGE = 'Não foi possível carregar os dados de telemetria. Tente novamente.'
 
 export async function fetchTelemetry(query: TelemetryQuery): Promise<TelemetryRecord> {

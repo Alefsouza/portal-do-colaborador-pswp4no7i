@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T11:55:48.001Z",
+  "generatedAt": "2026-08-24T12:36:48.760Z",
   "collections": [
     {
       "name": "users",
@@ -1195,6 +1195,85 @@
         }
       ],
       "indexes": []
+    },
+    {
+      "name": "escala_registros",
+      "type": "base",
+      "apiRules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "registro",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "veiculo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "linha",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tabela",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inicio",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fim",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pegada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_escala_registros_unique ON escala_registros (registro, data, veiculo)",
+        "CREATE INDEX idx_escala_registros_lookup ON escala_registros (registro, data, inicio)"
+      ]
     }
   ]
 }

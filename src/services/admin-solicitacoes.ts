@@ -52,6 +52,10 @@ export async function transferSolicitacao(id: string, idProprietario: string): P
   await pb.collection('solicitacoes').update(id, { id_proprietario: idProprietario })
 }
 
+export async function assumirSolicitacao(id: string, idProprietario: string): Promise<void> {
+  await pb.collection('solicitacoes').update(id, { id_proprietario: idProprietario })
+}
+
 export async function transferToDepartment(id: string, departamento: string): Promise<void> {
   await pb.collection('solicitacoes').update(id, { departamento, id_proprietario: '' })
 }

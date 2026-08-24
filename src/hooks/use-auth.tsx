@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       localStorage.setItem(TOKEN_KEY, result.token)
       localStorage.setItem('loginTimestamp', new Date().toISOString())
       localStorage.setItem(USER_KEY, JSON.stringify(result.user))
-      pb.authStore.save(result.token, result.user)
+      pb.authStore.save(result.token, result.user as unknown as import('pocketbase').RecordModel)
       setToken(result.token)
       setUser(result.user)
       return { error: null as string | null, user: result.user }
@@ -95,7 +95,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(TOKEN_KEY, newToken)
     localStorage.setItem(USER_KEY, JSON.stringify(newUser))
     localStorage.setItem('loginTimestamp', new Date().toISOString())
-    pb.authStore.save(newToken, newUser)
+    pb.authStore.save(newToken, newUser as unknown as import('pocketbase').RecordModel)
     setToken(newToken)
     setUser(newUser)
   }
@@ -104,7 +104,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const updatedUser = user ? { ...user, ...updates } : null
     if (updatedUser) {
       localStorage.setItem(USER_KEY, JSON.stringify(updatedUser))
-      if (token) pb.authStore.save(token, updatedUser)
+      if (token)
+        pb.authStore.save(token, updatedUser as unknown as import('pocketbase').RecordModel)
       setUser(updatedUser)
     }
   }

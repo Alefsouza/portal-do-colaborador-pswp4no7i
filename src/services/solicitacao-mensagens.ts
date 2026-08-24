@@ -6,6 +6,7 @@ export interface SolicitacaoMensagem {
   id_usuario: string
   tipo_remetente: string
   mensagem: string
+  anexo?: string
   created: string
   updated: string
   expand?: {
@@ -32,4 +33,27 @@ export async function createMensagem(data: {
   mensagem: string
 }): Promise<SolicitacaoMensagem> {
   return (await pb.collection('solicitacao_mensagens').create(data)) as SolicitacaoMensagem
+}
+
+export async function sendMensagem(data: {
+  id_solicitacao: string
+  id_usuario: string
+  tipo_remetente: string
+  mensagem: string
+  anexo?: File | null
+}): Promise<SolicitacaoMensagem> {
+  const formData = new FormData()
+  formData.append('id_solicitacao', data.id_solicitacao)
+  formData.append('id_usuario', data.id_usuario)
+  formData.append('tipo_remetente', data.tipo_remetente)
+  formData.append('mensagem', data.mensagem)
+  if (data.anexo) {
+    formData.append('anexo', data.anexo)
+  }
+  return (await pb.collection('solicitacao_mensagens').create(formData)) as SolicitacaoMensagem
+}
+
+export function getAnexoUrl(mensagem: SolicitacaoMensagem): string {
+  if (!mensagem.anexo) return ''
+  return pb.files.getURL(mensagem, mensagem.anexo)
 }

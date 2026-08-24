@@ -188,15 +188,15 @@ export default function AdminSolicitacaoChat() {
         <ChatMessages messages={messages} selfType="Admin" />
         {!isFinalizada && <ChatInput onSend={handleSend} />}
       </Card>
-      {id && (
+      {id && solicitacao && (
         <TransferirDialog
           open={showTransfer}
           onOpenChange={setShowTransfer}
           solicitacaoId={id}
-          departamento={user?.departamento || ''}
-          perfil={user?.perfil || ''}
-          currentAdminId={user?.id || ''}
-          onTransferred={loadData}
+          currentDepartamento={solicitacao.departamento}
+          onTransferred={() => {
+            loadData()
+          }}
         />
       )}
     </div>

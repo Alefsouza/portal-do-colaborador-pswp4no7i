@@ -35,166 +35,64 @@ routerAdd('GET', '/backend/v1/escala', (e) => {
     return e.json(200, { items: [] })
   }
 
-  const dataParam = (e.requestInfo().query && e.requestInfo().query.data) || ''
-
-  var CACHE_TTL_MS = 5 * 60 * 1000
-  var now = Date.now()
-  var allItems = null
-
-  var cacheRecord = null
-  try {
-    cacheRecord = $app.findFirstRecordByFilter('escala_cache', "id != ''")
-  } catch (_) {}
-
-  if (cacheRecord) {
-    var fetchedAtStr = cacheRecord.getString('fetched_at')
-    var fetchedAt = parseInt(fetchedAtStr, 10)
-    if (!isNaN(fetchedAt) && now - fetchedAt < CACHE_TTL_MS) {
-      var cachedDataStr = cacheRecord.getString('data')
-      if (cachedDataStr) {
-        try {
-          var parsed = JSON.parse(cachedDataStr)
-          if (Array.isArray(parsed)) {
-            allItems = parsed
-          }
-        } catch (_) {
-          allItems = null
-        }
-      }
-    }
-  }
-
-  if (allItems === null) {
-    var escalaUrl = $secrets.get('RECIBO_VIEW') || ''
-    if (!escalaUrl) {
-      return e.json(502, { error: 'URL da escala não configurada.' })
-    }
-
-    function fetchPage(url) {
-      var res
-      try {
-        res = $http.send({
-          url: url,
-          method: 'GET',
-          timeout: 30,
-        })
-      } catch (err) {
-        $app.logger().error('Escala fetch transport error', 'message', err.message)
-        return null
-      }
-      if (res.statusCode !== 200) {
-        $app.logger().error('Escala fetch failed', 'statusCode', res.statusCode)
-        return null
-      }
-      try {
-        return res.json
-      } catch (_) {
-        return null
-      }
-    }
-
-    var firstData = fetchPage(escalaUrl)
-    if (firstData === null) {
-      return e.json(502, { error: 'Falha ao buscar dados da escala.' })
-    }
-
-    allItems = []
-
-    function extractItems(data) {
-      if (Array.isArray(data)) {
-        return data
-      }
-      if (data && Array.isArray(data.items)) {
-        return data.items
-      }
-      if (data && Array.isArray(data.data)) {
-        return data.data
-      }
-      if (data && Array.isArray(data.results)) {
-        return data.results
-      }
-      if (data && typeof data === 'object') {
-        return [data]
-      }
-      return []
-    }
-
-    function hasPagination(data) {
-      if (!data || typeof data !== 'object') return false
-      if (Array.isArray(data)) return false
-      if (data.next && typeof data.next === 'string') return true
-      if (data.page != null && data.pages != null && data.pages > 1) return true
-      if (data.total_pages != null && data.total_pages > 1) return true
-      if (data.last_page != null && data.last_page > 1) return true
-      return false
-    }
-
-    function getNextUrl(data) {
-      if (!data || typeof data !== 'object') return ''
-      if (data.next && typeof data.next === 'string') return data.next
-      return ''
-    }
-
-    allItems = allItems.concat(extractItems(firstData))
-
-    if (hasPagination(firstData)) {
-      var nextUrl = getNextUrl(firstData)
-      var safetyCounter = 0
-      while (nextUrl && safetyCounter < 500) {
-        safetyCounter++
-        var pageData = fetchPage(nextUrl)
-        if (pageData === null) break
-        allItems = allItems.concat(extractItems(pageData))
-        nextUrl = getNextUrl(pageData)
-      }
-    }
-
-    try {
-      var cacheCol = $app.findCollectionByNameOrId('escala_cache')
-      var dataStr = JSON.stringify(allItems)
-      if (cacheRecord) {
-        cacheRecord.set('data', dataStr)
-        cacheRecord.set('fetched_at', String(now))
-        $app.saveNoValidate(cacheRecord)
-      } else {
-        var newRecord = new Record(cacheCol)
-        newRecord.set('data', dataStr)
-        newRecord.set('fetched_at', String(now))
-        $app.saveNoValidate(newRecord)
-      }
-    } catch (cacheErr) {
-      $app.logger().error('Failed to save escala cache', 'message', String(cacheErr))
-    }
-  }
-
-  function convertDate(dateStr) {
+  function normalizeDate(dateStr) {
     if (!dateStr || typeof dateStr !== 'string') return ''
     var parts = dateStr.split('-')
     if (parts.length === 3) {
-      return parts[2] + '-' + parts[1] + '-' + parts[0]
+      if (parts[0].length === 2 && parts[2].length === 4) {
+        // DD-MM-YYYY -> YYYY-MM-DD
+        return parts[2] + '-' + parts[1] + '-' + parts[0]
+      }
+      if (parts[0].length === 4 && parts[2].length === 2) {
+        // Already YYYY-MM-DD
+        return dateStr
+      }
     }
     return dateStr
   }
 
-  var filtered = []
-  for (var i = 0; i < allItems.length; i++) {
-    var item = allItems[i]
-    if (String(item.registro || '') === String(registro)) {
-      var convertedData = convertDate(item.data)
-      if (dataParam && convertedData !== dataParam) {
-        continue
-      }
-      filtered.push({
-        data: convertedData,
-        veiculo: String(item.prefixo || ''),
-        linha: String(item.linha || ''),
-        tabela: String(item.tabela || ''),
-        inicio: String(item.inicio || ''),
-        fim: String(item.h_previsto || ''),
-        pegada: String(item.pegada || ''),
-      })
+  const rawDataParam = (e.requestInfo().query && e.requestInfo().query.data) || ''
+  const dataParam = normalizeDate(rawDataParam)
+
+  var records = []
+  try {
+    if (dataParam) {
+      records = $app.findRecordsByFilter(
+        'escala_registros',
+        'registro = {:registro} && data = {:data}',
+        'data,inicio',
+        0,
+        0,
+        { registro: registro, data: dataParam },
+      )
+    } else {
+      records = $app.findRecordsByFilter(
+        'escala_registros',
+        'registro = {:registro}',
+        'data,inicio',
+        0,
+        0,
+        { registro: registro },
+      )
     }
+  } catch (err) {
+    $app.logger().error('Escala query error', 'message', String(err))
+    return e.json(500, { error: 'Erro ao consultar escala.' })
   }
 
-  return e.json(200, { items: filtered })
+  var items = []
+  for (var i = 0; i < records.length; i++) {
+    var rec = records[i]
+    items.push({
+      data: rec.getString('data'),
+      veiculo: rec.getString('veiculo'),
+      linha: rec.getString('linha'),
+      tabela: rec.getString('tabela'),
+      inicio: rec.getString('inicio'),
+      fim: rec.getString('fim'),
+      pegada: rec.getString('pegada'),
+    })
+  }
+
+  return e.json(200, { items: items })
 })
