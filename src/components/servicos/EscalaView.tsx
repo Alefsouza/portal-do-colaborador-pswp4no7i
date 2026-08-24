@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn, formatBrazilianDate } from '@/lib/utils'
 import { fetchEscala, type EscalaItem } from '@/services/escala'
 
 interface EscalaViewProps {
@@ -218,7 +218,11 @@ export function EscalaView({ userName, onBack }: EscalaViewProps) {
                       </span>
                     </div>
                     <div className="p-6 grid grid-cols-2 gap-2 md:gap-3">
-                      <DetailItem icon={CalendarDays} label="Data" value={item.data} />
+                      <DetailItem
+                        icon={CalendarDays}
+                        label="Data"
+                        value={formatBrazilianDate(item.data)}
+                      />
                       <DetailItem icon={Bus} label="Veículo" value={item.veiculo} />
                       <DetailItem icon={Route} label="Linha" value={item.linha} />
                       <DetailItem icon={Hash} label="Tabela" value={item.tabela} />
