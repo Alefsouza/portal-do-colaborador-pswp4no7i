@@ -280,9 +280,9 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
     var reg = String(item.registro || '').trim()
     var rawData = item.data
     var convertedData = convertDate(rawData)
-    var veic = String(item.prefixo || '').trim()
+    var veic = item.prefixo != null ? String(item.prefixo).trim() : ''
 
-    if (!reg || !convertedData || !veic) {
+    if (!reg || !convertedData) {
       continue
     }
 
@@ -332,27 +332,34 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
     }
   }
 
-  // 5. DELETE FROM escala_registros WHERE data < hoje - 4 dias
-  var cutoffDate = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
-  var cutoffStr = cutoffDate.toISOString().slice(0, 10)
+  // 5. DELETE FROM escala_registros WHERE data < hoje OR data > hoje + 3 dias
+  // Mantém apenas a janela de hoje até hoje + 3 dias (4 dias no total)
+  var now = new Date()
+  var todayStr = now.toISOString().slice(0, 10)
+  var maxDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+  var maxDateStr = maxDate.toISOString().slice(0, 10)
   var deletedCount = 0
 
   try {
     var countModel = new DynamicModel({ cnt: 0 })
     $app
       .db()
-      .newQuery('SELECT COUNT(*) as cnt FROM escala_registros WHERE data < {:cutoff}')
-      .bind({ cutoff: cutoffStr })
+      .newQuery(
+        'SELECT COUNT(*) as cnt FROM escala_registros WHERE data < {:today} OR data > {:maxDate}',
+      )
+      .bind({ today: todayStr, maxDate: maxDateStr })
       .one(countModel)
     deletedCount = countModel.cnt || 0
 
     $app
       .db()
-      .newQuery('DELETE FROM escala_registros WHERE data < {:cutoff}')
-      .bind({ cutoff: cutoffStr })
+      .newQuery('DELETE FROM escala_registros WHERE data < {:today} OR data > {:maxDate}')
+      .bind({ today: todayStr, maxDate: maxDateStr })
       .execute()
   } catch (errDelete) {
-    $app.logger().error('Escala sync error deleting old records', 'error', String(errDelete))
+    $app
+      .logger()
+      .error('Escala sync error deleting out-of-window records', 'error', String(errDelete))
   }
 
   console.log(
@@ -381,7 +388,9 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
       updatedCount,
       'deleted',
       deletedCount,
-      'cutoff_date',
-      cutoffStr,
+      'today',
+      todayStr,
+      'max_date',
+      maxDateStr,
     )
 })
