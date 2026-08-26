@@ -23,9 +23,23 @@ export default function Recibos() {
   const [error, setError] = useState(false)
   const [documento, setDocumento] = useState<DocumentoData | null>(null)
 
-  const isValid = !!tipo && !!mes && !!ano
-  const anoAtual = new Date().getFullYear()
+  const now = new Date()
+  const anoAtual = now.getFullYear()
+  const mesAtual = now.getMonth() + 1 // 1 (Janeiro) a 12 (Dezembro)
   const anos = [anoAtual, anoAtual - 1, anoAtual - 2]
+
+  const anoSelecionado = ano ? Number(ano) : null
+  const mesesDisponiveis = MESES.map((nome, index) => ({
+    nome,
+    valor: index + 1,
+  })).filter((m) => {
+    if (!anoSelecionado) return true
+    if (anoSelecionado > anoAtual) return false
+    if (anoSelecionado === anoAtual) return m.valor <= mesAtual
+    return true // anos passados: todos os meses
+  })
+
+  const isValid = !!tipo && !!mes && !!ano
 
   const handleGerar = async () => {
     if (!isValid) return
@@ -87,8 +101,18 @@ export default function Recibos() {
                   <Select
                     value={ano}
                     onValueChange={(v) => {
+                      const novoAno = Number(v)
                       setAno(v)
                       setDocumento(null)
+                      // Se o mês selecionado atualmente não for válido para o novo ano, reseta o mês
+                      if (mes) {
+                        const mesNum = Number(mes)
+                        if (novoAno === anoAtual && mesNum > mesAtual) {
+                          setMes('')
+                        } else if (novoAno > anoAtual) {
+                          setMes('')
+                        }
+                      }
                     }}
                   >
                     <SelectTrigger>
@@ -111,14 +135,19 @@ export default function Recibos() {
                       setMes(v)
                       setDocumento(null)
                     }}
+                    disabled={mesesDisponiveis.length === 0}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
+                      <SelectValue
+                        placeholder={
+                          mesesDisponiveis.length === 0 ? 'Nenhum mês disponível' : 'Selecione...'
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {MESES.map((m, i) => (
-                        <SelectItem key={m} value={String(i + 1)}>
-                          {m}
+                      {mesesDisponiveis.map((m) => (
+                        <SelectItem key={m.valor} value={String(m.valor)}>
+                          {m.nome}
                         </SelectItem>
                       ))}
                     </SelectContent>
