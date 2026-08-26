@@ -107,6 +107,24 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
     return ''
   }
 
+  function isTimeoutError(err) {
+    if (!err) return false
+    var msg = (err.message ? err.message : String(err)).toLowerCase()
+    var objStr = ''
+    try {
+      objStr = JSON.stringify(err).toLowerCase()
+    } catch (_) {}
+    return (
+      msg.indexOf('context deadline exceeded') !== -1 ||
+      msg.indexOf('timeout') !== -1 ||
+      msg.indexOf('timed out') !== -1 ||
+      msg.indexOf('deadline exceeded') !== -1 ||
+      objStr.indexOf('context deadline exceeded') !== -1 ||
+      objStr.indexOf('timeout') !== -1 ||
+      objStr.indexOf('timed out') !== -1
+    )
+  }
+
   function fetchPage(url, isFirstPage, pageNum) {
     var pageLabel = pageNum ? 'page ' + pageNum : isFirstPage ? 'first page' : 'page'
     var masked = maskUrl(url)
@@ -138,6 +156,28 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
       try {
         errObjStr = JSON.stringify(err)
       } catch (_) {}
+
+      if (!isFirstPage && isTimeoutError(err)) {
+        console.log(
+          'Escala sync: timeout (context deadline exceeded) on ' +
+            pageLabel +
+            ' treated as end of pagination: ' +
+            errMsg,
+        )
+        $app
+          .logger()
+          .info(
+            'Escala sync: timeout on page ' + (pageNum || 2) + ' treated as end of pagination',
+            'page',
+            pageLabel,
+            'message',
+            errMsg,
+            'url',
+            masked,
+          )
+        return { isTimeout: true, data: null }
+      }
+
       console.log(
         'Escala sync fetch transport error on ' +
           pageLabel +
@@ -226,7 +266,7 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
   $app.logger().info('Escala sync starting', 'url', maskedEscalaUrl)
 
   var firstData = fetchPage(escalaUrl, true, 1)
-  if (firstData === null) {
+  if (firstData === null || (firstData && firstData.isTimeout)) {
     console.log('Escala sync failed at stage fetch_first_page with 0 pages fetched')
     $app
       .logger()
@@ -264,6 +304,27 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
             currPageNum,
             'pagesFetched',
             pagesFetched,
+          )
+        break
+      }
+      if (pageData && pageData.isTimeout) {
+        console.log(
+          'Escala sync: pagination ended at page ' +
+            currPageNum +
+            ' due to timeout (no more records, preserving ' +
+            allItems.length +
+            ' collected items)',
+        )
+        $app
+          .logger()
+          .info(
+            'Escala sync: pagination ended due to timeout (no more records)',
+            'page',
+            currPageNum,
+            'pagesFetched',
+            pagesFetched,
+            'totalItemsSoFar',
+            allItems.length,
           )
         break
       }
