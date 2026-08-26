@@ -83,27 +83,6 @@ export default function Recibos() {
             {tipo && (
               <>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">Mês *</label>
-                  <Select
-                    value={mes}
-                    onValueChange={(v) => {
-                      setMes(v)
-                      setDocumento(null)
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MESES.map((m, i) => (
-                        <SelectItem key={m} value={String(i + 1)}>
-                          {m}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-700">Ano *</label>
                   <Select
                     value={ano}
@@ -119,6 +98,27 @@ export default function Recibos() {
                       {anos.map((a) => (
                         <SelectItem key={a} value={String(a)}>
                           {a}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">Mês *</label>
+                  <Select
+                    value={mes}
+                    onValueChange={(v) => {
+                      setMes(v)
+                      setDocumento(null)
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MESES.map((m, i) => (
+                        <SelectItem key={m} value={String(i + 1)}>
+                          {m}
                         </SelectItem>
                       ))}
                     </SelectContent>
