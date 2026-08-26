@@ -285,11 +285,12 @@ cronAdd('escala_sync', '*/5 * * * *', () => {
   for (var i = 0; i < allItems.length; i++) {
     var item = allItems[i]
     var reg = String(item.registro || '').trim()
+    var nome = item.nome ? String(item.nome).trim() : null
     var rawData = item.data
     var convertedData = convertDate(rawData)
     var veic = item.prefixo != null ? String(item.prefixo).trim() : ''
 
-    if (!reg || !convertedData || !veic) {
+    if (!reg || !convertedData || !nome) {
       continue
     }
 
