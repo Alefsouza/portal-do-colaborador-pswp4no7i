@@ -57,7 +57,7 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [position, setPosition] = useState<VehiclePosition | null>(null)
-  const [mapMode, setMapMode] = useState<'map' | 'satellite'>('map')
+  const [mapMode, setMapMode] = useState<'map' | 'satellite'>('satellite')
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<ReturnType<Window['L']['map']> | null>(null)
   const tileLayerRef = useRef<any>(null)
