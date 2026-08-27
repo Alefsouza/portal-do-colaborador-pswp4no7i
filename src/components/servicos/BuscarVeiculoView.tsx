@@ -11,6 +11,8 @@ import {
   Accessibility,
   Navigation,
   Warehouse,
+  Map as MapIcon,
+  Layers,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -55,14 +57,17 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [position, setPosition] = useState<VehiclePosition | null>(null)
+  const [mapMode, setMapMode] = useState<'map' | 'satellite'>('map')
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<ReturnType<Window['L']['map']> | null>(null)
+  const tileLayerRef = useRef<any>(null)
 
   useEffect(() => {
     return () => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove()
         mapInstanceRef.current = null
+        tileLayerRef.current = null
       }
     }
   }, [])
@@ -73,22 +78,65 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
     if (mapInstanceRef.current) {
       mapInstanceRef.current.remove()
       mapInstanceRef.current = null
+      tileLayerRef.current = null
     }
 
     const L = window.L
     const map = L.map(mapRef.current).setView([position.latitude, position.longitude], 16)
     mapInstanceRef.current = map
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(map)
+    const tileLayer =
+      mapMode === 'satellite'
+        ? L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            {
+              attribution:
+                '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+              maxZoom: 19,
+            },
+          )
+        : L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19,
+          })
+
+    tileLayer.addTo(map)
+    tileLayerRef.current = tileLayer
 
     const marker = L.marker([position.latitude, position.longitude]).addTo(map)
     marker.bindPopup(`<strong>Veículo ${position.prefixo}</strong>`).openPopup()
 
     setTimeout(() => map.invalidateSize(), 100)
   }, [position])
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.L) return
+
+    const L = window.L
+    const map = mapInstanceRef.current
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current)
+    }
+
+    const newTileLayer =
+      mapMode === 'satellite'
+        ? L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            {
+              attribution:
+                '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+              maxZoom: 19,
+            },
+          )
+        : L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19,
+          })
+
+    newTileLayer.addTo(map)
+    tileLayerRef.current = newTileLayer
+  }, [mapMode])
 
   const handleSearch = async () => {
     if (!prefixo.trim()) return
@@ -193,7 +241,35 @@ export function BuscarVeiculoView({ onBack }: BuscarVeiculoViewProps) {
                   )}
                 </Badge>
               </div>
-              <div ref={mapRef} className="w-full h-[400px]" />
+              <div className="relative w-full h-[400px]">
+                <div ref={mapRef} className="w-full h-full" />
+                <div className="absolute top-3 right-3 z-[1000] flex items-center bg-slate-900/85 backdrop-blur-md p-1 rounded-lg border border-slate-700/60 shadow-lg transition-all duration-200">
+                  <button
+                    type="button"
+                    onClick={() => setMapMode('map')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                      mapMode === 'map'
+                        ? 'bg-slate-800 text-green-400 shadow-sm border border-slate-600/70'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/50 border border-transparent'
+                    }`}
+                  >
+                    <MapIcon className="w-3.5 h-3.5" />
+                    <span>Mapa</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMapMode('satellite')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                      mapMode === 'satellite'
+                        ? 'bg-slate-800 text-green-400 shadow-sm border border-slate-600/70'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/50 border border-transparent'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Satélite</span>
+                  </button>
+                </div>
+              </div>
             </CardContent>
           </Card>
           <Card className="border-green-200">
